@@ -1,0 +1,45 @@
+{
+  "name": "@soulseer/client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run",
+    "lint": "eslint src --max-warnings=0"
+  },
+  "dependencies": {
+    "@cloudflare/realtimekit-react": "latest",
+    "@cloudflare/realtimekit-react-ui": "latest",
+    "@fontsource/alex-brush": "latest",
+    "@fontsource/manrope": "latest",
+    "@fontsource/playfair-display": "latest",
+    "@neondatabase/neon-js": "latest",
+    "@soulseer/shared": "*",
+    "@stripe/react-stripe-js": "latest",
+    "@stripe/stripe-js": "latest",
+    "lucide-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "react-router-dom": "7.18.1",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "@testing-library/jest-dom": "latest",
+    "@testing-library/react": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "latest",
+    "eslint": "latest",
+    "eslint-plugin-react-hooks": "latest",
+    "eslint-plugin-react-refresh": "latest",
+    "globals": "latest",
+    "jsdom": "latest",
+    "typescript-eslint": "latest",
+    "vite": "latest",
+    "vitest": "latest"
+  }
+}

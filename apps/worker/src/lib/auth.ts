@@ -1,0 +1,126 @@
+import { eq } from "drizzle-orm";
+import type { MiddlewareHandler } from "hono";
+import { createRemoteJWKSet, jwtVerify } from "jose";
+import { users, type AuthenticatedUser } from "@soulseer/shared";
+import type { AppBindings, AuthIdentity } from "../types";
+import { createDatabase } from "./db";
+import { AppError } from "./errors";
+
+function bearerToken(authorization: string | undefined): string {
+  if (!authorization?.startsWith("Bearer ")) {
+    throw new AppError(401, "AUTH_REQUIRED", "Please sign in to continue.");
+  }
+
+  const token = authorization.slice("Bearer ".length).trim();
+  if (!token || token.length > 8192) {
+    throw new AppError(
+      401,
+      "INVALID_SESSION",
+      "Your session is invalid or expired.",
+    );
+  }
+  return token;
+}
+
+async function verifyIdentity(token: string, env: Env): Promise<AuthIdentity> {
+  const jwks = createRemoteJWKSet(new URL(env.NEON_AUTH_JWKS_URL));
+  try {
+    const { payload } = await jwtVerify(token, jwks, {
+      issuer: env.NEON_AUTH_ISSUER,
+      algorithms: ["RS256", "ES256"],
+    });
+    const email = typeof payload.email === "string" ? payload.email : null;
+    if (!payload.sub || !email) {
+      throw new AppError(
+        401,
+        "INVALID_SESSION",
+        "Your session is missing required identity claims.",
+      );
+    }
+    return {
+      subject: payload.sub,
+      email,
+      name: typeof payload.name === "string" ? payload.name : null,
+    };
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new AppError(
+      401,
+      "INVALID_SESSION",
+      "Your session is invalid or expired.",
+    );
+  }
+}
+
+export const requireIdentity: MiddlewareHandler<AppBindings> = async (
+  context,
+  next,
+) => {
+  const identity = await verifyIdentity(
+    bearerToken(context.req.header("Authorization")),
+    context.env,
+  );
+  context.set("identity", identity);
+  await next();
+};
+
+export const requireUser: MiddlewareHandler<AppBindings> = async (
+  context,
+  next,
+) => {
+  const identity = await verifyIdentity(
+    bearerToken(context.req.header("Authorization")),
+    context.env,
+  );
+  const { db } = createDatabase(context.env.DATABASE_URL);
+  const [profile] = await db
+    .select()
+    .from(users)
+    .where(eq(users.neonAuthUserId, identity.subject))
+    .limit(1);
+
+  if (!profile) {
+    throw new AppError(
+      409,
+      "PROFILE_REQUIRED",
+      "Complete your SoulSeer profile to continue.",
+    );
+  }
+  if (profile.status !== "active") {
+    throw new AppError(
+      403,
+      "ACCOUNT_UNAVAILABLE",
+      "This account is not currently active.",
+    );
+  }
+
+  const user: AuthenticatedUser = {
+    id: profile.id,
+    neonAuthUserId: profile.neonAuthUserId,
+    email: profile.email,
+    username: profile.username,
+    fullName: profile.fullName,
+    role: profile.role,
+    status: profile.status,
+  };
+
+  context.set("identity", identity);
+  context.set("user", user);
+  await next();
+};
+
+export function requireRole(
+  ...roles: AuthenticatedUser["role"][]
+): MiddlewareHandler<AppBindings> {
+  return async (context, next) => {
+    const user = context.get("user");
+    if (!roles.includes(user.role)) {
+      throw new AppError(
+        403,
+        "FORBIDDEN",
+        "You do not have permission to perform this action.",
+      );
+    }
+    await next();
+  };
+}
