@@ -25,9 +25,9 @@ Run `npm install`, `npm run typecheck`, `npm test`, and `npm run build` from the
 1. Create `soulseer-profile-images-dev`, `soulseer-profile-images-staging`, and `soulseer-profile-images` R2 buckets. Enable lifecycle cleanup for abandoned temporary objects.
 2. Create separate RealtimeKit Apps for development, staging, and production. Create `soulseer-client` and `soulseer-reader` presets for chat, audio, and video permissions. Only server-side actions may end a session for everyone.
 3. Register the Worker webhook URL `/api/webhooks/realtimekit` for `meeting.started`, `meeting.ended`, `meeting.participantJoined`, `meeting.participantLeft`, and `meeting.chatSynced`.
-4. Replace example Worker names, bucket names, origins, and rate-limit namespace IDs in `apps/worker/wrangler.jsonc` for each environment.
+4. Review Worker names, bucket names, origins, routes, and rate-limit namespace IDs in `apps/worker/wrangler.toml` for each environment. Production uses the `seer` R2 bucket and `api.soul-seer.net` Custom Domain.
 5. Set Worker secrets with `wrangler secret put NAME --env production` for every secret listed in `.env.example`. Use a randomly generated, 32-byte-or-longer `UPLOAD_SIGNING_SECRET`.
-6. Generate bindings with `npm run cf:types`, deploy staging, exercise the reading lifecycle, and only then deploy production.
+6. Generate bindings with `npm run cf:types`, exercise the reading lifecycle locally or in staging, and deploy production with `npm run deploy:worker` only after every required secret is present.
 
 ## 4. Stripe
 

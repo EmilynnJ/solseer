@@ -43,6 +43,6 @@ BEGIN
       updated_at = now()
   WHERE id = p_user_id;
 END;
-$$;
+$$;--> statement-breakpoint
 
 REVOKE ALL ON FUNCTION public.request_account_deletion(uuid, text) FROM PUBLIC;

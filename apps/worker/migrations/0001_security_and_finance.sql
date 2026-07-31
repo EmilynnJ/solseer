@@ -3,6 +3,17 @@ ALTER TABLE "forum_comments"
   FOREIGN KEY ("parent_id") REFERENCES "forum_comments"("id")
   ON DELETE CASCADE;--> statement-breakpoint
 
+-- The Worker validates Neon Auth JWTs before using the owner connection. New
+-- databases do not have the Data API's auth schema, so provide a fail-closed
+-- compatibility function. Enabling Neon Data API may replace this function
+-- with its JWT-aware implementation later.
+CREATE SCHEMA IF NOT EXISTS auth;--> statement-breakpoint
+CREATE OR REPLACE FUNCTION auth.user_id()
+RETURNS text
+LANGUAGE sql
+STABLE
+AS $$ SELECT NULL::text $$;--> statement-breakpoint
+
 CREATE OR REPLACE FUNCTION public.app_user_id()
 RETURNS uuid
 LANGUAGE sql

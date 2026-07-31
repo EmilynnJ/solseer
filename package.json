@@ -11,6 +11,7 @@
     "dev": "concurrently -n client,worker -c magenta,cyan \"npm:dev -w @soulseer/client\" \"npm:dev -w @soulseer/worker\"",
     "dev:client": "npm run dev -w @soulseer/client",
     "dev:worker": "npm run dev -w @soulseer/worker",
+    "deploy:worker": "npm run deploy -w @soulseer/worker",
     "build": "npm run build -w @soulseer/shared && npm run build -w @soulseer/worker && npm run build -w @soulseer/client",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",

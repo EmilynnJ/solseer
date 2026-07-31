@@ -1,0 +1,98 @@
+name = "soulseer-api"
+main = "src/index.ts"
+compatibility_date = "2026-07-29"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[vars]
+ENVIRONMENT = "development"
+FRONTEND_ORIGIN = "http://localhost:5173"
+REALTIMEKIT_WEBHOOK_PUBLIC_KEY_URL = "https://api.realtime.cloudflare.com/.well-known/webhooks.json"
+CLOUDFLARE_ACCOUNT_ID = "36814ac88bdb3e11aea039b9757b5cbd"
+
+[durable_objects]
+bindings = [
+  { name = "READING_COORDINATOR", class_name = "ReadingCoordinator" },
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ReadingCoordinator"]
+
+[[r2_buckets]]
+binding = "PROFILE_IMAGES"
+bucket_name = "seer"
+
+[[ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "1001"
+simple = { limit = 120, period = 60 }
+
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+
+[observability.traces]
+enabled = true
+head_sampling_rate = 0.05
+
+[env.production]
+workers_dev = true
+routes = [
+  { pattern = "api.soul-seer.net", custom_domain = true },
+]
+
+[env.production.vars]
+ENVIRONMENT = "production"
+FRONTEND_ORIGIN = "https://soul-seer.net"
+REALTIMEKIT_WEBHOOK_PUBLIC_KEY_URL = "https://api.realtime.cloudflare.com/.well-known/webhooks.json"
+CLOUDFLARE_ACCOUNT_ID = "36814ac88bdb3e11aea039b9757b5cbd"
+
+[env.production.secrets]
+required = ["DATABASE_URL", "UPLOAD_SIGNING_SECRET"]
+
+[[env.production.durable_objects.bindings]]
+name = "READING_COORDINATOR"
+class_name = "ReadingCoordinator"
+
+[[env.production.r2_buckets]]
+binding = "PROFILE_IMAGES"
+bucket_name = "seer"
+
+[[env.production.ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "1001"
+simple = { limit = 120, period = 60 }
+
+[[env.production.secrets_store_secrets]]
+binding = "NEON_AUTH_ISSUER"
+store_id = "ff0046cedef447d2a6a84d137b2fd0c3"
+secret_name = "NEON_AUTH_URL"
+
+[[env.production.secrets_store_secrets]]
+binding = "NEON_AUTH_JWKS_URL"
+store_id = "ff0046cedef447d2a6a84d137b2fd0c3"
+secret_name = "NEON_AUTH_JWKS_URL"
+
+[[env.production.secrets_store_secrets]]
+binding = "STRIPE_SECRET_KEY"
+store_id = "ff0046cedef447d2a6a84d137b2fd0c3"
+secret_name = "STRIPE_SECRET_KEY"
+
+[[env.production.secrets_store_secrets]]
+binding = "STRIPE_WEBHOOK_SECRET"
+store_id = "ff0046cedef447d2a6a84d137b2fd0c3"
+secret_name = "STRIPE_WEBHOOK_SECRET"
+
+[[env.production.secrets_store_secrets]]
+binding = "REALTIMEKIT_APP_ID"
+store_id = "ff0046cedef447d2a6a84d137b2fd0c3"
+secret_name = "CLOUDFLARE_REALTIME_APP_ID"
+
+[[env.production.secrets_store_secrets]]
+binding = "CLOUDFLARE_REALTIMEKIT_API_TOKEN"
+store_id = "ff0046cedef447d2a6a84d137b2fd0c3"
+secret_name = "CLOUDFLARE_REALTIME_TOKEN"
