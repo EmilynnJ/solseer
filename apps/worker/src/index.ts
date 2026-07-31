@@ -21,6 +21,45 @@ import { webhookRoutes } from "./routes/webhooks";
 
 export { ReadingCoordinator } from "./durable/reading-coordinator";
 
+const accountSecretNames = [
+  "NEON_AUTH_ISSUER",
+  "NEON_AUTH_JWKS_URL",
+  "STRIPE_SECRET_KEY",
+  "STRIPE_WEBHOOK_SECRET",
+  "REALTIMEKIT_APP_ID",
+  "CLOUDFLARE_REALTIMEKIT_API_TOKEN",
+] as const;
+
+type SecretStoreBinding = { get(): Promise<string> };
+
+function isSecretStoreBinding(value: unknown): value is SecretStoreBinding {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "get" in value &&
+    typeof (value as SecretStoreBinding).get === "function"
+  );
+}
+
+async function resolveAccountSecrets(env: Env): Promise<Env> {
+  const accountBindings = accountSecretNames.flatMap((name) => {
+    const binding = env[name] as unknown;
+    return isSecretStoreBinding(binding) ? [[name, binding] as const] : [];
+  });
+  if (accountBindings.length === 0) return env;
+
+  const resolvedEntries = await Promise.all(
+    accountBindings.map(async ([name, binding]) =>
+      [name, await binding.get()] as const,
+    ),
+  );
+
+  return {
+    ...env,
+    ...Object.fromEntries(resolvedEntries),
+  } as Env;
+}
+
 const app = new Hono<AppBindings>();
 
 app.use("*", async (context, next) => {
@@ -70,4 +109,12 @@ app.notFound((context) =>
 );
 app.onError((error, context) => errorResponse(error, context));
 
-export default app;
+export default {
+  async fetch(request: Request, env: Env, executionContext: ExecutionContext) {
+    return app.fetch(
+      request,
+      await resolveAccountSecrets(env),
+      executionContext,
+    );
+  },
+};

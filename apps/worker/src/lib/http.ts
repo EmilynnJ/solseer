@@ -26,19 +26,26 @@ export const exactOriginCors: MiddlewareHandler<{ Bindings: Env }> = async (
   next,
 ) => {
   const origin = context.req.header("Origin");
-  if (origin && origin !== context.env.FRONTEND_ORIGIN) {
+  const allowedOrigins = new Set([
+    context.env.FRONTEND_ORIGIN,
+    ...context.env.FRONTEND_ORIGINS.split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  ]);
+  if (origin && !allowedOrigins.has(origin)) {
     throw new AppError(
       403,
       "ORIGIN_NOT_ALLOWED",
       "This request origin is not allowed.",
     );
   }
+  const responseOrigin = origin ?? context.env.FRONTEND_ORIGIN;
 
   if (context.req.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
       headers: {
-        "Access-Control-Allow-Origin": context.env.FRONTEND_ORIGIN,
+        "Access-Control-Allow-Origin": responseOrigin,
         "Access-Control-Allow-Credentials": "true",
         "Access-Control-Allow-Headers":
           "Authorization, Content-Type, Idempotency-Key",
@@ -51,7 +58,7 @@ export const exactOriginCors: MiddlewareHandler<{ Bindings: Env }> = async (
   }
 
   await next();
-  context.header("Access-Control-Allow-Origin", context.env.FRONTEND_ORIGIN);
+  context.header("Access-Control-Allow-Origin", responseOrigin);
   context.header("Access-Control-Allow-Credentials", "true");
   context.header("Vary", "Origin");
 };

@@ -69,6 +69,14 @@ web_modules/
 .env
 .env.*
 !.env.example
+coverage/
+*.log
+.DS_Store
+.vercel/
+.playwright-cli/
+output/
+
+.env.local
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
