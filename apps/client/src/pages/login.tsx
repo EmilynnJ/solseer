@@ -29,8 +29,13 @@ export function LoginPage() {
   } | null>(null);
   const returnTo = params.get("returnTo") || "/dashboard";
   useEffect(() => {
-    if (auth.needsProfile) setMode("profile");
-  }, [auth.needsProfile]);
+    if (!auth.needsProfile) return;
+    setMode("profile");
+    setForm((current) => ({
+      ...current,
+      name: current.name || auth.sessionUser?.name || "",
+    }));
+  }, [auth.needsProfile, auth.sessionUser?.name]);
   if (auth.me && mode !== "profile") return <Navigate to={returnTo} replace />;
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -185,7 +190,10 @@ export function LoginPage() {
               onClick={() =>
                 void authClient.signIn.social({
                   provider: "google",
-                  callbackURL: `${window.location.origin}/login?complete=1`,
+                  callbackURL: `${window.location.origin}/login?${new URLSearchParams({
+                    complete: "1",
+                    ...(form.invite ? { readerInvite: form.invite } : {}),
+                  }).toString()}`,
                 })
               }
             >

@@ -1157,6 +1157,28 @@ td > button {
   gap: 0.7rem;
   color: var(--muted);
 }
+
+.profile-load-error {
+  width: min(680px, 100%);
+  margin: clamp(3rem, 10vh, 8rem) auto;
+  padding: clamp(2rem, 5vw, 4rem);
+  border: 1px solid color-mix(in srgb, var(--pink) 35%, transparent);
+  border-radius: 1.5rem;
+  background:
+    radial-gradient(circle at 85% 15%, rgb(255 105 180 / 14%), transparent 35%),
+    var(--surface);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 35%);
+  text-align: center;
+}
+
+.profile-load-error h1 {
+  margin: 0.4rem 0 1rem;
+}
+
+.profile-load-error p:not(.eyebrow) {
+  margin: 0 auto 1.5rem;
+  color: var(--muted);
+}
 .spin {
   animation: spin 1s linear infinite;
 }

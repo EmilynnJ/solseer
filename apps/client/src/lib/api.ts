@@ -16,6 +16,13 @@ export class ApiError extends Error {
   }
 }
 
+export function isProfileRequiredError(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    (error.code === "PROFILE_REQUIRED" || error.status === 404)
+  );
+}
+
 export async function api<T>(
   path: string,
   init: RequestInit = {},
