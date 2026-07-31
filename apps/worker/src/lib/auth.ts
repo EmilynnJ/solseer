@@ -1,6 +1,10 @@
 import { eq } from "drizzle-orm";
 import type { MiddlewareHandler } from "hono";
-import { createRemoteJWKSet, jwtVerify } from "jose";
+import {
+  createRemoteJWKSet,
+  jwtVerify,
+  type JWTVerifyGetKey,
+} from "jose";
 import { users, type AuthenticatedUser } from "@soulseer/shared";
 import type { AppBindings, AuthIdentity } from "../types";
 import { createDatabase } from "./db";
@@ -22,12 +26,17 @@ function bearerToken(authorization: string | undefined): string {
   return token;
 }
 
-async function verifyIdentity(token: string, env: Env): Promise<AuthIdentity> {
-  const jwks = createRemoteJWKSet(new URL(env.NEON_AUTH_JWKS_URL));
+export const NEON_AUTH_ALGORITHMS = ["EdDSA", "RS256", "ES256"];
+
+export async function verifyIdentityToken(
+  token: string,
+  issuer: string,
+  jwks: JWTVerifyGetKey,
+): Promise<AuthIdentity> {
   try {
     const { payload } = await jwtVerify(token, jwks, {
-      issuer: env.NEON_AUTH_ISSUER,
-      algorithms: ["RS256", "ES256"],
+      issuer,
+      algorithms: NEON_AUTH_ALGORITHMS,
     });
     const email = typeof payload.email === "string" ? payload.email : null;
     if (!payload.sub || !email) {
@@ -50,6 +59,14 @@ async function verifyIdentity(token: string, env: Env): Promise<AuthIdentity> {
       "Your session is invalid or expired.",
     );
   }
+}
+
+async function verifyIdentity(token: string, env: Env): Promise<AuthIdentity> {
+  return verifyIdentityToken(
+    token,
+    env.NEON_AUTH_ISSUER,
+    createRemoteJWKSet(new URL(env.NEON_AUTH_JWKS_URL)),
+  );
 }
 
 export const requireIdentity: MiddlewareHandler<AppBindings> = async (
