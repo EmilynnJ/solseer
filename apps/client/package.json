@@ -20,6 +20,7 @@
     "@soulseer/shared": "*",
     "@stripe/react-stripe-js": "latest",
     "@stripe/stripe-js": "latest",
+    "@vercel/analytics": "^2.0.1",
     "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
