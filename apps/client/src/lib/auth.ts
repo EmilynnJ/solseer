@@ -11,6 +11,6 @@ export const authClient = createAuthClient(
 );
 
 export async function getAccessToken(): Promise<string | null> {
-  const response = await authClient.token();
-  return response.data?.token ?? null;
+  const response = await authClient.getSession();
+  return response.data?.session?.token ?? null;
 }
