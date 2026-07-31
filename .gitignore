@@ -12,3 +12,5 @@ coverage/
 .vercel/
 .playwright-cli/
 output/
+
+.env.local

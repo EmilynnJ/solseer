@@ -7,6 +7,7 @@ workers_dev = true
 [vars]
 ENVIRONMENT = "development"
 FRONTEND_ORIGIN = "http://localhost:5173"
+FRONTEND_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
 REALTIMEKIT_WEBHOOK_PUBLIC_KEY_URL = "https://api.realtime.cloudflare.com/.well-known/webhooks.json"
 CLOUDFLARE_ACCOUNT_ID = "36814ac88bdb3e11aea039b9757b5cbd"
 
@@ -48,6 +49,7 @@ routes = [
 [env.production.vars]
 ENVIRONMENT = "production"
 FRONTEND_ORIGIN = "https://soul-seer.net"
+FRONTEND_ORIGINS = "https://soul-seer.net,https://www.soul-seer.net,https://solseer-client.vercel.app"
 REALTIMEKIT_WEBHOOK_PUBLIC_KEY_URL = "https://api.realtime.cloudflare.com/.well-known/webhooks.json"
 CLOUDFLARE_ACCOUNT_ID = "36814ac88bdb3e11aea039b9757b5cbd"
 
