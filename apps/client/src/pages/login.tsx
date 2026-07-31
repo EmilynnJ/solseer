@@ -10,14 +10,15 @@ export function LoginPage() {
   const [params] = useSearchParams();
   const auth = useSoulAuth();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"signin" | "signup" | "forgot" | "profile">(
-    params.get("complete") ? "profile" : "signin",
-  );
+  const [mode, setMode] = useState<
+    "signin" | "signup" | "verify" | "forgot" | "profile"
+  >(params.get("complete") ? "profile" : "signin");
   const [form, setForm] = useState({
     email: "",
     password: "",
     name: "",
     username: "",
+    otp: "",
     invite: params.get("readerInvite") ?? params.get("invite") ?? "",
   });
   const [show, setShow] = useState(false);
@@ -28,8 +29,13 @@ export function LoginPage() {
   } | null>(null);
   const returnTo = params.get("returnTo") || "/dashboard";
   useEffect(() => {
-    if (auth.needsProfile) setMode("profile");
-  }, [auth.needsProfile]);
+    if (!auth.needsProfile) return;
+    setMode("profile");
+    setForm((current) => ({
+      ...current,
+      name: current.name || auth.sessionUser?.name || "",
+    }));
+  }, [auth.needsProfile, auth.sessionUser?.name]);
   if (auth.me && mode !== "profile") return <Navigate to={returnTo} replace />;
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -50,10 +56,36 @@ export function LoginPage() {
           email: form.email,
           password: form.password,
           name: form.name,
-          callbackURL: "/login?complete=1",
+          callbackURL: `${window.location.origin}/login?complete=1`,
         });
         if (result.error) throw new Error(result.error.message);
+        if (result.data?.token) {
+          setMode("profile");
+        } else {
+          const verification = await authClient.emailOtp.sendVerificationOtp({
+            email: form.email,
+            type: "email-verification",
+          });
+          if (verification.error)
+            throw new Error(verification.error.message);
+          setMode("verify");
+          setMessage({
+            tone: "success",
+            text: "We sent a verification code to your email.",
+          });
+        }
+      } else if (mode === "verify") {
+        const result = await authClient.emailOtp.verifyEmail({
+          email: form.email,
+          otp: form.otp,
+        });
+        if (result.error) throw new Error(result.error.message);
+        await auth.refresh();
         setMode("profile");
+        setMessage({
+          tone: "success",
+          text: "Email verified. Choose your community username.",
+        });
       } else if (mode === "forgot") {
         const result = await authClient.requestPasswordReset({
           email: form.email,
@@ -88,6 +120,31 @@ export function LoginPage() {
       setBusy(false);
     }
   }
+  async function resendVerification() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await authClient.emailOtp.sendVerificationOtp({
+        email: form.email,
+        type: "email-verification",
+      });
+      if (result.error) throw new Error(result.error.message);
+      setMessage({
+        tone: "success",
+        text: "A new verification code is on its way.",
+      });
+    } catch (cause) {
+      setMessage({
+        tone: "error",
+        text:
+          cause instanceof Error
+            ? cause.message
+            : "We couldn’t resend the verification code.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <div className="auth-page">
       <section className="auth-visual">
@@ -113,30 +170,37 @@ export function LoginPage() {
               ? "Welcome back"
               : mode === "signup"
                 ? "Join the soul tribe"
-                : mode === "forgot"
-                  ? "Reset your password"
-                  : "Complete your profile"}
+                : mode === "verify"
+                  ? "Verify your email"
+                  : mode === "forgot"
+                    ? "Reset your password"
+                    : "Complete your profile"}
           </h2>
           <p className="muted">
-            {mode === "profile"
-              ? "Choose how you’ll appear in the SoulSeer community."
-              : "Your account is securely managed by Neon Auth."}
+            {mode === "verify"
+              ? `Enter the code sent to ${form.email}.`
+              : mode === "profile"
+                ? "Choose how you’ll appear in the SoulSeer community."
+                : "Your account is securely managed by Neon Auth."}
           </p>
           {message && <Notice tone={message.tone}>{message.text}</Notice>}
-          {mode !== "profile" && mode !== "forgot" && (
+          {(mode === "signin" || mode === "signup") && (
             <button
               className="google-button"
               onClick={() =>
                 void authClient.signIn.social({
                   provider: "google",
-                  callbackURL: `${window.location.origin}/login?complete=1`,
+                  callbackURL: `${window.location.origin}/login?${new URLSearchParams({
+                    complete: "1",
+                    ...(form.invite ? { readerInvite: form.invite } : {}),
+                  }).toString()}`,
                 })
               }
             >
               <span>G</span> Continue with Google
             </button>
           )}
-          {mode !== "profile" && mode !== "forgot" && (
+          {(mode === "signin" || mode === "signup") && (
             <div className="divider">
               <span>or use email</span>
             </div>
@@ -171,7 +235,7 @@ export function LoginPage() {
                 />
               </label>
             )}
-            {mode !== "profile" && (
+            {mode !== "profile" && mode !== "verify" && (
               <label>
                 Email address
                 <input
@@ -183,7 +247,7 @@ export function LoginPage() {
                 />
               </label>
             )}
-            {mode !== "forgot" && mode !== "profile" && (
+            {(mode === "signin" || mode === "signup") && (
               <label>
                 Password
                 <span className="password-field">
@@ -209,6 +273,21 @@ export function LoginPage() {
                 </span>
               </label>
             )}
+            {mode === "verify" && (
+              <label>
+                Verification code
+                <input
+                  required
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  minLength={6}
+                  maxLength={6}
+                  pattern="[0-9]{6}"
+                  value={form.otp}
+                  onChange={(e) => setForm({ ...form, otp: e.target.value })}
+                />
+              </label>
+            )}
             <Button disabled={busy}>
               {busy
                 ? "Please wait…"
@@ -216,11 +295,25 @@ export function LoginPage() {
                   ? "Sign in"
                   : mode === "signup"
                     ? "Create account"
-                    : mode === "forgot"
-                      ? "Send reset link"
-                      : "Enter SoulSeer"}
+                    : mode === "verify"
+                      ? "Verify email"
+                      : mode === "forgot"
+                        ? "Send reset link"
+                        : "Enter SoulSeer"}
             </Button>
           </form>
+          {mode === "verify" && (
+            <button
+              type="button"
+              className="plain-link"
+              disabled={busy}
+              onClick={() => {
+                void resendVerification();
+              }}
+            >
+              Resend verification code
+            </button>
+          )}
           {mode === "signin" && (
             <>
               <button className="plain-link" onClick={() => setMode("forgot")}>
@@ -234,7 +327,7 @@ export function LoginPage() {
               </p>
             </>
           )}
-          {(mode === "signup" || mode === "forgot") && (
+          {(mode === "signup" || mode === "verify" || mode === "forgot") && (
             <p className="switch-auth">
               Already belong?{" "}
               <button onClick={() => setMode("signin")}>Sign in</button>

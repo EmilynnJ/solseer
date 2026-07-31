@@ -94,6 +94,25 @@ adminRoutes.post("/readers", async (context) => {
         id: readerInvitations.id,
         expiresAt: readerInvitations.expiresAt,
       });
+    if (!invitation) {
+      throw new AppError(
+        500,
+        "INVITATION_CREATE_FAILED",
+        "The Reader invitation could not be created.",
+      );
+    }
+    await db.insert(auditLogs).values({
+      actorId: context.get("user").id,
+      action: "reader.invite",
+      targetType: "reader_invitation",
+      targetId: invitation.id,
+      metadata: {
+        email: input.email.toLowerCase(),
+        username: input.username,
+        verified: input.verified,
+        expiresAt: invitation.expiresAt.toISOString(),
+      },
+    });
     return context.json(
       {
         invitation,

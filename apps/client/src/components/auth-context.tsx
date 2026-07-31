@@ -9,7 +9,7 @@ import {
 } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import type { MeResponse } from "../types";
-import { api } from "../lib/api";
+import { api, isProfileRequiredError } from "../lib/api";
 import { authClient } from "../lib/auth";
 import { Loading } from "./ui";
 
@@ -18,6 +18,7 @@ type AuthState = {
   sessionUser: { id: string; email: string; name: string } | null;
   loading: boolean;
   needsProfile: boolean;
+  profileError: string | null;
   refresh: () => Promise<void>;
 };
 
@@ -28,22 +29,31 @@ export function SoulAuthProvider({ children }: PropsWithChildren) {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [needsProfile, setNeedsProfile] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!session.data?.user) {
       setMe(null);
       setNeedsProfile(false);
+      setProfileError(null);
       return;
     }
     setProfileLoading(true);
     try {
       setMe(await api<MeResponse>("/auth/me"));
       setNeedsProfile(false);
+      setProfileError(null);
     } catch (error) {
-      const missing =
-        error instanceof Error && "status" in error && error.status === 404;
+      setMe(null);
+      const missing = isProfileRequiredError(error);
       setNeedsProfile(missing);
-      if (!missing) throw error;
+      setProfileError(
+        missing
+          ? null
+          : error instanceof Error
+            ? error.message
+            : "We couldn't open your SoulSeer profile.",
+      );
     } finally {
       setProfileLoading(false);
     }
@@ -64,11 +74,13 @@ export function SoulAuthProvider({ children }: PropsWithChildren) {
         : null,
       loading: session.isPending || profileLoading,
       needsProfile,
+      profileError,
       refresh,
     }),
     [
       me,
       needsProfile,
+      profileError,
       profileLoading,
       refresh,
       session.data?.user,
@@ -105,7 +117,23 @@ export function Protected({
       />
     );
   if (auth.needsProfile) return <Navigate to="/login?complete=1" replace />;
-  if (!auth.me || (roles && !roles.includes(auth.me.user.role)))
+  if (!auth.me)
+    return (
+      <main className="page-shell">
+        <section className="profile-load-error" role="alert">
+          <p className="eyebrow">Your sanctuary is still here</p>
+          <h1>We couldn't open your dashboard.</h1>
+          <p>
+            {auth.profileError ??
+              "Your profile could not be loaded. Please try again."}
+          </p>
+          <button className="button" onClick={() => void auth.refresh()}>
+            Try again
+          </button>
+        </section>
+      </main>
+    );
+  if (roles && !roles.includes(auth.me.user.role))
     return <Navigate to="/dashboard" replace />;
   return children;
 }
