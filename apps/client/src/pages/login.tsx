@@ -6,15 +6,25 @@ import { api } from "../lib/api";
 import { useSoulAuth } from "../components/auth-context";
 import { Button, Notice } from "../components/ui";
 
+const PENDING_VERIFICATION_EMAIL = "soulseer.pendingVerificationEmail";
+
 export function LoginPage() {
   const [params] = useSearchParams();
   const auth = useSoulAuth();
   const navigate = useNavigate();
+  const pendingVerificationEmail =
+    sessionStorage.getItem(PENDING_VERIFICATION_EMAIL) ?? "";
   const [mode, setMode] = useState<
     "signin" | "signup" | "verify" | "forgot" | "profile"
-  >(params.get("complete") ? "profile" : "signin");
+  >(
+    pendingVerificationEmail
+      ? "verify"
+      : params.get("complete")
+        ? "profile"
+        : "signin",
+  );
   const [form, setForm] = useState({
-    email: "",
+    email: pendingVerificationEmail,
     password: "",
     name: "",
     username: "",
@@ -29,14 +39,15 @@ export function LoginPage() {
   } | null>(null);
   const returnTo = params.get("returnTo") || "/dashboard";
   useEffect(() => {
-    if (!auth.needsProfile) return;
+    if (!auth.needsProfile || mode === "verify") return;
     setMode("profile");
     setForm((current) => ({
       ...current,
       name: current.name || auth.sessionUser?.name || "",
     }));
-  }, [auth.needsProfile, auth.sessionUser?.name]);
-  if (auth.me && mode !== "profile") return <Navigate to={returnTo} replace />;
+  }, [auth.needsProfile, auth.sessionUser?.name, mode]);
+  if (auth.me && mode !== "profile" && mode !== "verify")
+    return <Navigate to={returnTo} replace />;
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -49,6 +60,21 @@ export function LoginPage() {
           callbackURL: returnTo,
         });
         if (result.error) throw new Error(result.error.message);
+        if (!result.data.user.emailVerified) {
+          const verification = await authClient.emailOtp.sendVerificationOtp({
+            email: form.email,
+            type: "email-verification",
+          });
+          if (verification.error)
+            throw new Error(verification.error.message);
+          sessionStorage.setItem(PENDING_VERIFICATION_EMAIL, form.email);
+          setMode("verify");
+          setMessage({
+            tone: "success",
+            text: "Verify your email with the code we just sent.",
+          });
+          return;
+        }
         await auth.refresh();
         navigate(returnTo);
       } else if (mode === "signup") {
@@ -59,20 +85,21 @@ export function LoginPage() {
           callbackURL: `${window.location.origin}/login?complete=1`,
         });
         if (result.error) throw new Error(result.error.message);
-        if (result.data?.token) {
-          setMode("profile");
-        } else {
+        if (!result.data.user.emailVerified) {
           const verification = await authClient.emailOtp.sendVerificationOtp({
             email: form.email,
             type: "email-verification",
           });
           if (verification.error)
             throw new Error(verification.error.message);
+          sessionStorage.setItem(PENDING_VERIFICATION_EMAIL, form.email);
           setMode("verify");
           setMessage({
             tone: "success",
             text: "We sent a verification code to your email.",
           });
+        } else {
+          setMode("profile");
         }
       } else if (mode === "verify") {
         const result = await authClient.emailOtp.verifyEmail({
@@ -80,6 +107,9 @@ export function LoginPage() {
           otp: form.otp,
         });
         if (result.error) throw new Error(result.error.message);
+        if (!result.data.user.emailVerified)
+          throw new Error("Email verification did not complete.");
+        sessionStorage.removeItem(PENDING_VERIFICATION_EMAIL);
         await auth.refresh();
         setMode("profile");
         setMessage({

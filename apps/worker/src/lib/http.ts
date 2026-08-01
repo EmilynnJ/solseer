@@ -48,7 +48,7 @@ export const exactOriginCors: MiddlewareHandler<{ Bindings: Env }> = async (
         "Access-Control-Allow-Origin": responseOrigin,
         "Access-Control-Allow-Credentials": "true",
         "Access-Control-Allow-Headers":
-          "Authorization, Content-Type, Idempotency-Key",
+          "Authorization, Content-Type, Idempotency-Key, X-SoulSeer-Upload-Capability, X-SoulSeer-Upload-Signature",
         "Access-Control-Allow-Methods":
           "GET, POST, PATCH, PUT, DELETE, OPTIONS",
         "Access-Control-Max-Age": "86400",

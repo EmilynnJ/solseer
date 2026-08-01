@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-deprecated -- SELF remains the typed fetch binding in this test configuration. */
 import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
@@ -33,6 +34,27 @@ describe("API security boundaries", () => {
     expect(response.status).toBe(204);
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe(origin);
     expect(response.headers.get("Vary")).toBe("Origin");
+  });
+
+  it("allows the signed Reader image headers in upload preflights", async () => {
+    const response = await SELF.fetch(
+      "https://api.example.test/api/uploads/reader-image",
+      {
+        method: "OPTIONS",
+        headers: {
+          Origin: "http://127.0.0.1:5173",
+          "Access-Control-Request-Method": "PUT",
+          "Access-Control-Request-Headers":
+            "authorization,content-type,x-soulseer-upload-capability,x-soulseer-upload-signature",
+        },
+      },
+    );
+    expect(response.status).toBe(204);
+    const allowed = response.headers
+      .get("Access-Control-Allow-Headers")
+      ?.toLowerCase();
+    expect(allowed).toContain("x-soulseer-upload-capability");
+    expect(allowed).toContain("x-soulseer-upload-signature");
   });
 
   it("requires authentication for Admin operations", async () => {

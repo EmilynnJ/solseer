@@ -43,7 +43,9 @@ uploadRoutes.post(
     const extension =
       input.contentType === "image/jpeg"
         ? "jpg"
-        : input.contentType.split("/")[1];
+        : input.contentType === "image/png"
+          ? "png"
+          : "webp";
     const capability: UploadCapability = {
       userId: targetUserId,
       key: `readers/${targetUserId}/${crypto.randomUUID()}.${extension}`,
@@ -114,10 +116,10 @@ uploadRoutes.put(
         "UPLOAD_EXPIRED",
         "Upload authorization has expired.",
       );
-    const bodyLength = Number(context.req.header("Content-Length") ?? 0);
+    const bytes = new Uint8Array(await context.req.arrayBuffer());
     if (
-      bodyLength !== capability.size ||
-      bodyLength > MAX_PROFILE_IMAGE_BYTES
+      bytes.byteLength !== capability.size ||
+      bytes.byteLength > MAX_PROFILE_IMAGE_BYTES
     ) {
       throw new AppError(
         400,
@@ -132,7 +134,6 @@ uploadRoutes.put(
         "The uploaded image type does not match its authorization.",
       );
     }
-    const bytes = new Uint8Array(await context.req.arrayBuffer());
     if (!matchesImageSignature(bytes, capability.contentType)) {
       throw new AppError(
         400,

@@ -50,10 +50,18 @@ export async function verifyIdentityToken(
         "Your session is missing required identity claims.",
       );
     }
+    if (payload.emailVerified !== true) {
+      throw new AppError(
+        403,
+        "EMAIL_NOT_VERIFIED",
+        "Verify your email address to continue.",
+      );
+    }
     return {
       subject: payload.sub,
       email,
       name: typeof payload.name === "string" ? payload.name : null,
+      emailVerified: true,
     };
   } catch (error) {
     if (error instanceof AppError) throw error;

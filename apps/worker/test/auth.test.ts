@@ -24,6 +24,7 @@ describe("Neon Auth JWT verification", () => {
     const token = await new SignJWT({
       email: "reader@example.test",
       name: "SoulSeer Reader",
+      emailVerified: true,
     })
       .setProtectedHeader({ alg: "EdDSA", kid })
       .setIssuer(issuer)
@@ -45,6 +46,40 @@ describe("Neon Auth JWT verification", () => {
       subject: "neon-user-id",
       email: "reader@example.test",
       name: "SoulSeer Reader",
+      emailVerified: true,
+    });
+  });
+
+  it("rejects an otherwise valid token until its email is verified", async () => {
+    const issuer = "https://auth.example.test";
+    const kid = "neon-auth-ed25519";
+    const { privateKey, publicKey } = await generateKeyPair("EdDSA", {
+      crv: "Ed25519",
+      extractable: true,
+    });
+    const publicJwk = await exportJWK(publicKey);
+    const token = await new SignJWT({
+      email: "unverified@example.test",
+      emailVerified: false,
+    })
+      .setProtectedHeader({ alg: "EdDSA", kid })
+      .setIssuer(issuer)
+      .setSubject("unverified-user")
+      .setIssuedAt()
+      .setExpirationTime("5m")
+      .sign(privateKey);
+
+    await expect(
+      verifyIdentityToken(
+        token,
+        issuer,
+        createLocalJWKSet({
+          keys: [{ ...publicJwk, alg: "EdDSA", kid }],
+        }),
+      ),
+    ).rejects.toMatchObject({
+      status: 403,
+      code: "EMAIL_NOT_VERIFIED",
     });
   });
 
