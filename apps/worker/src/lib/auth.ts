@@ -28,6 +28,10 @@ function bearerToken(authorization: string | undefined): string {
 
 export const NEON_AUTH_ALGORITHMS = ["EdDSA", "RS256", "ES256"];
 
+export function neonAuthIssuer(authUrl: string): string {
+  return new URL(authUrl).origin;
+}
+
 export async function verifyIdentityToken(
   token: string,
   issuer: string,
@@ -64,7 +68,7 @@ export async function verifyIdentityToken(
 async function verifyIdentity(token: string, env: Env): Promise<AuthIdentity> {
   return verifyIdentityToken(
     token,
-    env.NEON_AUTH_ISSUER,
+    neonAuthIssuer(env.NEON_AUTH_ISSUER),
     createRemoteJWKSet(new URL(env.NEON_AUTH_JWKS_URL)),
   );
 }

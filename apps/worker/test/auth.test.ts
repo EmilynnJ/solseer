@@ -6,13 +6,15 @@ import {
 } from "jose";
 import { describe, expect, it } from "vitest";
 import {
+  neonAuthIssuer,
   NEON_AUTH_ALGORITHMS,
   verifyIdentityToken,
 } from "../src/lib/auth";
 
 describe("Neon Auth JWT verification", () => {
   it("accepts the EdDSA/Ed25519 tokens issued by Neon Auth", async () => {
-    const issuer = "https://auth.example.test/neondb/auth";
+    const configuredAuthUrl = "https://auth.example.test/neondb/auth";
+    const issuer = "https://auth.example.test";
     const kid = "neon-auth-ed25519";
     const { privateKey, publicKey } = await generateKeyPair("EdDSA", {
       crv: "Ed25519",
@@ -32,7 +34,7 @@ describe("Neon Auth JWT verification", () => {
 
     const identity = await verifyIdentityToken(
       token,
-      issuer,
+      neonAuthIssuer(configuredAuthUrl),
       createLocalJWKSet({
         keys: [{ ...publicJwk, alg: "EdDSA", kid }],
       }),
@@ -44,5 +46,13 @@ describe("Neon Auth JWT verification", () => {
       email: "reader@example.test",
       name: "SoulSeer Reader",
     });
+  });
+
+  it("normalizes the configured Neon Auth endpoint to the JWT issuer origin", () => {
+    expect(
+      neonAuthIssuer(
+        "https://ep-example.neonauth.us-east-2.aws.neon.tech/neondb/auth",
+      ),
+    ).toBe("https://ep-example.neonauth.us-east-2.aws.neon.tech");
   });
 });
