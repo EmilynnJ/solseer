@@ -28,6 +28,8 @@ const accountSecretNames = [
   "STRIPE_WEBHOOK_SECRET",
   "REALTIMEKIT_APP_ID",
   "CLOUDFLARE_REALTIMEKIT_API_TOKEN",
+  "TELNYX_API_KEY",
+  "TELNYX_FROM_NUMBER",
 ] as const;
 
 type SecretStoreBinding = { get(): Promise<string> };

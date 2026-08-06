@@ -34,6 +34,23 @@ export const readerProfileUpdateSchema = z.object({
 
 export const readerStatusSchema = z.object({ isOnline: z.boolean() });
 
+export const readerNotificationSettingsSchema = z
+  .object({
+    phoneNumber: z
+      .string()
+      .trim()
+      .regex(/^\+[1-9]\d{7,14}$/, "Use international format, such as +15551234567.")
+      .nullable(),
+    smsNotificationsEnabled: z.boolean(),
+  })
+  .refine(
+    (value) => !value.smsNotificationsEnabled || Boolean(value.phoneNumber),
+    {
+      message: "Add a mobile number before enabling text notifications.",
+      path: ["phoneNumber"],
+    },
+  );
+
 export const createReaderSchema = z.object({
   email: z.string().trim().email().max(254),
   username: trimmedText(3, 40).regex(/^[a-zA-Z0-9_.-]+$/),

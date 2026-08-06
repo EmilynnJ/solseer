@@ -43,6 +43,13 @@
       "when": 1785020200000,
       "tag": "0005_account_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785625800000,
+      "tag": "0006_profile_and_reader_notifications",
+      "breakpoints": true
     }
   ]
 }

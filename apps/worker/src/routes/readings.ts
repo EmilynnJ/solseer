@@ -17,9 +17,13 @@ import {
   addParticipant,
   createMeeting,
   disableMeeting,
+  RealtimeKitProviderError,
   refreshParticipantToken,
+  resolveParticipantPresets,
 } from "../providers/realtimekit";
 import type { ReadingCoordinator } from "../durable/reading-coordinator";
+import { logger } from "../lib/log";
+import { notifyReaderOfIncomingReading } from "../services/notifications";
 
 export const readingRoutes = new Hono<AppBindings>();
 
@@ -41,6 +45,13 @@ readingRoutes.post(
       const id = response.rows[0]?.id;
       if (typeof id !== "string")
         throw new Error("Reading request did not return an id.");
+      context.executionCtx.waitUntil(
+        notifyReaderOfIncomingReading(context.env, {
+          id,
+          readerId: input.readerId,
+          type: input.type,
+        }),
+      );
       return context.json({ reading: { id, status: "pending" } }, 201);
     } catch (error) {
       const message = error instanceof Error ? error.message : "";
@@ -140,19 +151,20 @@ readingRoutes.post(
         .where(eq(users.id, claimed.clientId))
         .limit(1);
       if (!client) throw new Error("Assigned client profile not found.");
+      const presets = await resolveParticipantPresets(context.env);
       meetingId = await createMeeting(context.env, readingId);
       const [clientParticipant, readerParticipant] = await Promise.all([
         addParticipant(context.env, {
           meetingId,
           appUserId: client.id,
           displayName: client.fullName,
-          presetName: "soulseer-client",
+          presetName: presets.client,
         }),
         addParticipant(context.env, {
           meetingId,
           appUserId: user.id,
           displayName: user.fullName,
-          presetName: "soulseer-reader",
+          presetName: presets.reader,
         }),
       ]);
       const [reading] = await db
@@ -181,17 +193,40 @@ readingRoutes.post(
         participantToken: readerParticipant.token,
       });
     } catch (error) {
+      const stage =
+        error instanceof RealtimeKitProviderError ? error.stage : "unknown";
+      logger.error(
+        "RealtimeKit reading preflight failed",
+        {
+          requestId: context.get("requestId"),
+          userId: user.id,
+          readingId,
+          operation: stage,
+        },
+        error instanceof RealtimeKitProviderError
+          ? {
+              providerStatus: error.providerStatus,
+              providerCodes: error.providerCodes,
+            }
+          : {
+              error: error instanceof Error ? error.message : String(error),
+            },
+      );
       if (meetingId)
         await disableMeeting(context.env, meetingId).catch(() => undefined);
       await db
         .update(readingSessions)
         .set({
           status: "failed",
-          failureReason: "realtimekit_preflight_failed",
+          failureReason: `realtimekit_${stage}_failed`,
           updatedAt: new Date(),
         })
         .where(eq(readingSessions.id, readingId));
-      throw error;
+      throw new AppError(
+        502,
+        "REALTIMEKIT_PREFLIGHT_FAILED",
+        "The private reading room could not be prepared. No funds were charged.",
+      );
     }
   },
 );

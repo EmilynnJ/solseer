@@ -8,4 +8,6 @@ interface Env {
   REALTIMEKIT_APP_ID: string;
   CLOUDFLARE_REALTIMEKIT_API_TOKEN: string;
   UPLOAD_SIGNING_SECRET: string;
+  TELNYX_API_KEY?: string;
+  TELNYX_FROM_NUMBER?: string;
 }

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { and, desc, eq, gt, sql } from "drizzle-orm";
 import {
   READER_HEARTBEAT_FRESH_MS,
+  readerNotificationSettingsSchema,
   readerPricingSchema,
   readerProfileUpdateSchema,
   readerProfiles,
@@ -208,6 +209,29 @@ readerRoutes.patch(
     const [reader] = await db
       .update(readerProfiles)
       .set({ ...input, updatedAt: new Date() })
+      .where(eq(readerProfiles.userId, context.get("user").id))
+      .returning();
+    return context.json({ reader });
+  },
+);
+
+readerRoutes.patch(
+  "/notifications",
+  requireUser,
+  requireRole("reader"),
+  async (context) => {
+    const input = readerNotificationSettingsSchema.parse(
+      await context.req.json(),
+    );
+    const { db } = createDatabase(context.env.DATABASE_URL);
+    const [reader] = await db
+      .update(readerProfiles)
+      .set({
+        phoneNumber: input.phoneNumber,
+        smsNotificationsEnabled: input.smsNotificationsEnabled,
+        smsConsentAt: input.smsNotificationsEnabled ? new Date() : null,
+        updatedAt: new Date(),
+      })
       .where(eq(readerProfiles.userId, context.get("user").id))
       .returning();
     return context.json({ reader });

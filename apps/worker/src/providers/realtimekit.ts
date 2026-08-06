@@ -1,6 +1,25 @@
 import { z } from "zod";
 import { AppError } from "../lib/errors";
 
+export type RealtimeKitStage =
+  | "presets"
+  | "meeting"
+  | "participant"
+  | "participant_token"
+  | "end_session"
+  | "disable_meeting";
+
+export class RealtimeKitProviderError extends Error {
+  constructor(
+    readonly stage: RealtimeKitStage,
+    readonly providerStatus: number,
+    readonly providerCodes: string[],
+  ) {
+    super(`RealtimeKit ${stage} request failed.`);
+    this.name = "RealtimeKitProviderError";
+  }
+}
+
 const meetingResponseSchema = z.object({
   success: z.literal(true),
   data: z.object({ id: z.string().uuid() }),
@@ -20,6 +39,21 @@ const refreshedTokenResponseSchema = z.object({
   data: z.object({ token: z.string().min(1) }),
 });
 
+const presetListResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.array(z.object({ name: z.string().min(1) })),
+});
+
+const providerErrorResponseSchema = z.object({
+  errors: z
+    .array(
+      z.object({
+        code: z.union([z.string(), z.number()]).optional(),
+      }),
+    )
+    .optional(),
+});
+
 type RealtimeKitConfig = Pick<
   Env,
   | "CLOUDFLARE_ACCOUNT_ID"
@@ -36,24 +70,93 @@ async function request<T>(
   path: string,
   init: RequestInit,
   schema: z.ZodType<T>,
+  stage: RealtimeKitStage,
 ): Promise<T> {
+  const headers = new Headers(init.headers);
+  headers.set(
+    "Authorization",
+    `Bearer ${env.CLOUDFLARE_REALTIMEKIT_API_TOKEN}`,
+  );
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
   const response = await fetch(`${apiBase(env)}${path}`, {
     ...init,
-    headers: {
-      Authorization: `Bearer ${env.CLOUDFLARE_REALTIMEKIT_API_TOKEN}`,
-      "Content-Type": "application/json",
-      ...init.headers,
-    },
+    headers,
     signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) {
-    throw new AppError(
-      502,
-      "REALTIMEKIT_ERROR",
-      "The reading service is temporarily unavailable.",
+    const payload = providerErrorResponseSchema.safeParse(
+      await response.json().catch(() => null),
+    );
+    throw new RealtimeKitProviderError(
+      stage,
+      response.status,
+      payload.success
+        ? (payload.data.errors ?? []).flatMap((error) =>
+            error.code === undefined ? [] : [String(error.code)],
+          )
+        : [],
     );
   }
-  return schema.parse(await response.json());
+  try {
+    return schema.parse(await response.json());
+  } catch {
+    throw new RealtimeKitProviderError(stage, response.status, [
+      "invalid_response",
+    ]);
+  }
+}
+
+function normalizedPresetName(value: string): string {
+  return value.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-");
+}
+
+function findPreset(
+  names: string[],
+  preferred: string,
+  role: "host" | "participant",
+): string | undefined {
+  const exact = names.find(
+    (name) => normalizedPresetName(name) === normalizedPresetName(preferred),
+  );
+  if (exact) return exact;
+  return (
+    names.find((name) => {
+      const normalized = normalizedPresetName(name);
+      return normalized.includes(role) && normalized.includes("group");
+    }) ?? names.find((name) => normalizedPresetName(name).includes(role))
+  );
+}
+
+export function selectParticipantPresets(names: string[]): {
+  client: string;
+  reader: string;
+} {
+  const reader = findPreset(names, "soulseer-reader", "host") ?? names[0];
+  const client =
+    findPreset(names, "soulseer-client", "participant") ?? names[0];
+  if (!reader || !client) {
+    throw new RealtimeKitProviderError("presets", 200, [
+      "no_presets_configured",
+    ]);
+  }
+  return { client, reader };
+}
+
+export async function resolveParticipantPresets(
+  env: RealtimeKitConfig,
+): Promise<{ client: string; reader: string }> {
+  const result = await request(
+    env,
+    "/presets?per_page=100",
+    { method: "GET" },
+    presetListResponseSchema,
+    "presets",
+  );
+  return selectParticipantPresets(
+    result.data.map((preset) => preset.name),
+  );
 }
 
 export async function createMeeting(
@@ -73,6 +176,7 @@ export async function createMeeting(
       }),
     },
     meetingResponseSchema,
+    "meeting",
   );
   return result.data.id;
 }
@@ -83,7 +187,7 @@ export async function addParticipant(
     meetingId: string;
     appUserId: string;
     displayName: string;
-    presetName: "soulseer-client" | "soulseer-reader";
+    presetName: string;
   },
 ): Promise<{ id: string; token: string }> {
   const result = await request(
@@ -98,6 +202,7 @@ export async function addParticipant(
       }),
     },
     participantResponseSchema,
+    "participant",
   );
   const token = result.data.token ?? result.data.auth_token;
   if (!token) {
@@ -120,6 +225,7 @@ export async function refreshParticipantToken(
     `/meetings/${meetingId}/participants/${participantId}/token`,
     { method: "POST", body: "{}" },
     refreshedTokenResponseSchema,
+    "participant_token",
   );
   return result.data.token;
 }

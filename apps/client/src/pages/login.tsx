@@ -46,7 +46,7 @@ export function LoginPage() {
       name: current.name || auth.sessionUser?.name || "",
     }));
   }, [auth.needsProfile, auth.sessionUser?.name, mode]);
-  if (auth.me && mode !== "profile" && mode !== "verify")
+  if (auth.me && mode !== "verify")
     return <Navigate to={returnTo} replace />;
   async function submit(event: FormEvent) {
     event.preventDefault();

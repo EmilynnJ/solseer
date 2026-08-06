@@ -360,6 +360,8 @@ function ReaderDashboard() {
     pricingVideo?: number;
     bio?: string;
     specialties?: string[];
+    phoneNumber?: string | null;
+    smsNotificationsEnabled?: boolean;
   } | null;
   const insights = useApiData(
     () =>
@@ -387,6 +389,10 @@ function ReaderDashboard() {
   const [profile, setProfile] = useState({
     bio: reader?.bio ?? "",
     specialties: (reader?.specialties ?? []).join(", "),
+  });
+  const [notifications, setNotifications] = useState({
+    phoneNumber: reader?.phoneNumber ?? "",
+    smsNotificationsEnabled: reader?.smsNotificationsEnabled ?? false,
   });
   const [message, setMessage] = useState<string | null>(null);
   useEffect(() => {
@@ -435,6 +441,29 @@ function ReaderDashboard() {
     await refreshMe();
     setMessage("Profile saved.");
     setSaving(false);
+  }
+  async function saveNotifications(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await api("/readers/notifications", {
+        method: "PATCH",
+        body: JSON.stringify({
+          phoneNumber: notifications.phoneNumber.trim() || null,
+          smsNotificationsEnabled: notifications.smsNotificationsEnabled,
+        }),
+      });
+      await refreshMe();
+      setMessage("Text notification settings saved.");
+    } catch (cause) {
+      setMessage(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to save text notification settings.",
+      );
+    } finally {
+      setSaving(false);
+    }
   }
   async function accept(id: string) {
     try {
@@ -590,6 +619,41 @@ function ReaderDashboard() {
           }
           reader
         />
+      </DashboardSection>
+      <DashboardSection icon={<Radio />} title="Reading alerts">
+        <form className="stack-form compact" onSubmit={saveNotifications}>
+          <label>
+            Mobile number
+            <input
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="+15551234567"
+              value={notifications.phoneNumber}
+              onChange={(event) =>
+                setNotifications({
+                  ...notifications,
+                  phoneNumber: event.target.value,
+                })
+              }
+            />
+          </label>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={notifications.smsNotificationsEnabled}
+              onChange={(event) =>
+                setNotifications({
+                  ...notifications,
+                  smsNotificationsEnabled: event.target.checked,
+                })
+              }
+            />
+            Text me when a client requests a reading. Message and data rates
+            may apply. Reply STOP to opt out.
+          </label>
+          <Button disabled={saving}>Save reading alerts</Button>
+        </form>
       </DashboardSection>
       <DashboardSection icon={<Star />} title="Reviews received">
         {insights.data?.reviews.length ? (

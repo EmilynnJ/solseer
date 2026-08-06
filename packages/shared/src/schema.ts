@@ -86,6 +86,10 @@ export const refundStatusEnum = pgEnum("refund_status", [
   "failed",
   "cancelled",
 ]);
+export const notificationDeliveryStatusEnum = pgEnum(
+  "notification_delivery_status",
+  ["pending", "sent", "failed"],
+);
 
 const createdAt = timestamp("created_at", { withTimezone: true, mode: "date" })
   .defaultNow()
@@ -152,6 +156,14 @@ export const readerProfiles = pgTable(
     stripeOnboardingComplete: boolean("stripe_onboarding_complete")
       .default(false)
       .notNull(),
+    phoneNumber: text("phone_number"),
+    smsNotificationsEnabled: boolean("sms_notifications_enabled")
+      .default(false)
+      .notNull(),
+    smsConsentAt: timestamp("sms_consent_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     createdAt,
     updatedAt,
   },
@@ -324,6 +336,34 @@ export const reviews = pgTable(
     uniqueIndex("reviews_reading_uidx").on(table.readingId),
     index("reviews_reader_idx").on(table.readerId, table.createdAt),
     check("reviews_rating_range", sql`${table.rating} BETWEEN 1 AND 5`),
+  ],
+);
+
+export const notificationDeliveries = pgTable(
+  "notification_deliveries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    readingId: uuid("reading_id")
+      .notNull()
+      .references(() => readingSessions.id, { onDelete: "cascade" }),
+    recipientId: uuid("recipient_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    channel: text("channel").notNull(),
+    status: notificationDeliveryStatusEnum("status")
+      .default("pending")
+      .notNull(),
+    providerMessageId: text("provider_message_id"),
+    failureCode: text("failure_code"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("notification_delivery_reading_recipient_channel_uidx").on(
+      table.readingId,
+      table.recipientId,
+      table.channel,
+    ),
   ],
 );
 
