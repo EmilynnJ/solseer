@@ -248,8 +248,8 @@ readerRoutes.get(
     const [summary] = await db
       .select({
         pendingPayout: pendingPayouts.availableAmount,
-        historicalEarnings: sql<number>`coalesce(sum(case when ${walletLedgerEntries.type} = 'reader_earning' then ${walletLedgerEntries.amount} else 0 end), 0)::int`,
-        todayEarnings: sql<number>`coalesce(sum(case when ${walletLedgerEntries.type} = 'reader_earning' and ${walletLedgerEntries.createdAt} >= date_trunc('day', now()) then ${walletLedgerEntries.amount} else 0 end), 0)::int`,
+        historicalEarnings: sql<number>`coalesce(sum(case when ${walletLedgerEntries.type} in ('reader_earning', 'message_earning') then ${walletLedgerEntries.amount} else 0 end), 0)::int`,
+        todayEarnings: sql<number>`coalesce(sum(case when ${walletLedgerEntries.type} in ('reader_earning', 'message_earning') and ${walletLedgerEntries.createdAt} >= date_trunc('day', now()) then ${walletLedgerEntries.amount} else 0 end), 0)::int`,
       })
       .from(pendingPayouts)
       .leftJoin(

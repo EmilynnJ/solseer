@@ -1,7 +1,10 @@
 import { z } from "zod";
 import {
   COMMUNITY_CATEGORIES,
+  MAX_DIRECT_MESSAGE_LENGTH,
+  MAX_PAID_REPLY_CENTS,
   MAX_PROFILE_IMAGE_BYTES,
+  MIN_PAID_REPLY_CENTS,
   MINIMUM_TOP_UP_CENTS,
   READING_TYPES,
   USER_ROLES,
@@ -39,7 +42,10 @@ export const readerNotificationSettingsSchema = z
     phoneNumber: z
       .string()
       .trim()
-      .regex(/^\+[1-9]\d{7,14}$/, "Use international format, such as +15551234567.")
+      .regex(
+        /^\+[1-9]\d{7,14}$/,
+        "Use international format, such as +15551234567.",
+      )
       .nullable(),
     smsNotificationsEnabled: z.boolean(),
   })
@@ -50,6 +56,27 @@ export const readerNotificationSettingsSchema = z
       path: ["phoneNumber"],
     },
   );
+
+export const startConversationSchema = z.object({
+  readerId: uuidSchema,
+  body: trimmedText(1, MAX_DIRECT_MESSAGE_LENGTH),
+});
+
+export const sendDirectMessageSchema = z.discriminatedUnion("paid", [
+  z.object({
+    body: trimmedText(1, MAX_DIRECT_MESSAGE_LENGTH),
+    paid: z.literal(false),
+  }),
+  z.object({
+    body: trimmedText(1, MAX_DIRECT_MESSAGE_LENGTH),
+    paid: z.literal(true),
+    priceCents: z
+      .number()
+      .int()
+      .min(MIN_PAID_REPLY_CENTS)
+      .max(MAX_PAID_REPLY_CENTS),
+  }),
+]);
 
 export const createReaderSchema = z.object({
   email: z.string().trim().email().max(254),

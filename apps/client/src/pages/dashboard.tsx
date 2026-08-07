@@ -90,6 +90,10 @@ function ClientDashboard() {
         item.status,
       ),
     ) ?? [];
+  const completed =
+    history.data?.readings.filter((item) =>
+      ["ended", "failed", "cancelled"].includes(item.status),
+    ) ?? [];
   async function exportData() {
     const data = await api<Record<string, unknown>>("/auth/export");
     const url = URL.createObjectURL(
@@ -166,11 +170,7 @@ function ClientDashboard() {
         {history.error ? (
           <Notice tone="error">{history.error}</Notice>
         ) : (
-          <ReadingTable
-            rows={
-              history.data?.readings.filter((r) => r.status === "ended") ?? []
-            }
-          />
+          <ReadingTable rows={completed} />
         )}
       </DashboardSection>
       <DashboardSection icon={<Banknote />} title="Transactions">
@@ -478,6 +478,10 @@ function ReaderDashboard() {
   const earnings = insights.data?.summary.historicalEarnings ?? 0;
   const pending =
     history.data?.readings.filter((r) => r.status === "pending") ?? [];
+  const completed =
+    history.data?.readings.filter((item) =>
+      ["ended", "failed", "cancelled"].includes(item.status),
+    ) ?? [];
   return (
     <div className="page-shell dashboard">
       <DashboardHeader
@@ -613,12 +617,7 @@ function ReaderDashboard() {
         </DashboardSection>
       </div>
       <DashboardSection icon={<History />} title="Session & review history">
-        <ReadingTable
-          rows={
-            history.data?.readings.filter((r) => r.status === "ended") ?? []
-          }
-          reader
-        />
+        <ReadingTable rows={completed} reader />
       </DashboardSection>
       <DashboardSection icon={<Radio />} title="Reading alerts">
         <form className="stack-form compact" onSubmit={saveNotifications}>
@@ -649,8 +648,8 @@ function ReaderDashboard() {
                 })
               }
             />
-            Text me when a client requests a reading. Message and data rates
-            may apply. Reply STOP to opt out.
+            Text me when a client requests a reading. Message and data rates may
+            apply. Reply STOP to opt out.
           </label>
           <Button disabled={saving}>Save reading alerts</Button>
         </form>
@@ -717,9 +716,7 @@ function ReaderImageUpload({ onDone }: { onDone: () => void }) {
       }
       onDone();
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Image upload failed.",
-      );
+      setError(cause instanceof Error ? cause.message : "Image upload failed.");
     } finally {
       setBusy(false);
     }
@@ -1278,7 +1275,7 @@ function ReadingTable({
           {rows.map((r) => (
             <tr key={r.id}>
               <td>{r.counterpartName ?? "Private client"}</td>
-              <td>{dateTime(r.startedAt ?? r.completedAt)}</td>
+              <td>{dateTime(r.startedAt ?? r.completedAt ?? r.createdAt)}</td>
               <td>{r.type}</td>
               <td>
                 <span className={`status ${r.status}`}>{r.status}</span>

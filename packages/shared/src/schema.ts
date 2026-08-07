@@ -55,6 +55,8 @@ export const ledgerTypeEnum = pgEnum("ledger_type", [
   "refund",
   "adjustment",
   "payout",
+  "message_charge",
+  "message_earning",
 ]);
 export const forumCategoryEnum = pgEnum("forum_category", [
   "general",
@@ -90,6 +92,11 @@ export const notificationDeliveryStatusEnum = pgEnum(
   "notification_delivery_status",
   ["pending", "sent", "failed"],
 );
+export const directMessageKindEnum = pgEnum("direct_message_kind", [
+  "client_message",
+  "reader_free",
+  "reader_paid",
+]);
 
 const createdAt = timestamp("created_at", { withTimezone: true, mode: "date" })
   .defaultNow()
@@ -175,6 +182,120 @@ export const readerProfiles = pgTable(
     check(
       "reader_profiles_nonnegative_rates",
       sql`${table.pricingChat} >= 0 AND ${table.pricingVoice} >= 0 AND ${table.pricingVideo} >= 0`,
+    ),
+  ],
+);
+
+export const messageConversations = pgTable(
+  "message_conversations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    readerId: uuid("reader_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    clientLastReadAt: timestamp("client_last_read_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .defaultNow()
+      .notNull(),
+    readerLastReadAt: timestamp("reader_last_read_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .defaultNow()
+      .notNull(),
+    lastMessageAt: timestamp("last_message_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .defaultNow()
+      .notNull(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("message_conversations_client_reader_uidx").on(
+      table.clientId,
+      table.readerId,
+    ),
+    index("message_conversations_client_idx").on(
+      table.clientId,
+      table.lastMessageAt,
+    ),
+    index("message_conversations_reader_idx").on(
+      table.readerId,
+      table.lastMessageAt,
+    ),
+    check(
+      "message_conversations_distinct_participants",
+      sql`${table.clientId} <> ${table.readerId}`,
+    ),
+  ],
+);
+
+export const directMessages = pgTable(
+  "direct_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => messageConversations.id, { onDelete: "cascade" }),
+    senderId: uuid("sender_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    kind: directMessageKindEnum("kind").notNull(),
+    body: text("body").notNull(),
+    priceCents: integer("price_cents").default(0).notNull(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("direct_messages_conversation_idx").on(
+      table.conversationId,
+      table.createdAt,
+    ),
+    check(
+      "direct_messages_body_length",
+      sql`char_length(${table.body}) BETWEEN 1 AND 8000`,
+    ),
+    check(
+      "direct_messages_price_matches_kind",
+      sql`(${table.kind} = 'reader_paid' AND ${table.priceCents} BETWEEN 100 AND 100000) OR (${table.kind} <> 'reader_paid' AND ${table.priceCents} = 0)`,
+    ),
+  ],
+);
+
+export const messageUnlocks = pgTable(
+  "message_unlocks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => directMessages.id, { onDelete: "restrict" }),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    readerId: uuid("reader_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    priceCents: integer("price_cents").notNull(),
+    readerShare: integer("reader_share").notNull(),
+    platformShare: integer("platform_share").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("message_unlocks_message_uidx").on(table.messageId),
+    uniqueIndex("message_unlocks_idempotency_uidx").on(table.idempotencyKey),
+    index("message_unlocks_client_idx").on(table.clientId, table.createdAt),
+    index("message_unlocks_reader_idx").on(table.readerId, table.createdAt),
+    check(
+      "message_unlocks_split_valid",
+      sql`${table.priceCents} > 0 AND ${table.readerShare} >= 0 AND ${table.platformShare} >= 0 AND ${table.readerShare} + ${table.platformShare} = ${table.priceCents}`,
     ),
   ],
 );
@@ -271,6 +392,9 @@ export const walletLedgerEntries = pgTable(
     readingId: uuid("reading_id").references(() => readingSessions.id, {
       onDelete: "restrict",
     }),
+    messageId: uuid("message_id").references(() => directMessages.id, {
+      onDelete: "restrict",
+    }),
     stripeReference: text("stripe_reference"),
     idempotencyKey: text("idempotency_key").notNull(),
     actorId: uuid("actor_id").references(() => users.id, {
@@ -286,6 +410,7 @@ export const walletLedgerEntries = pgTable(
     uniqueIndex("wallet_ledger_idempotency_uidx").on(table.idempotencyKey),
     index("wallet_ledger_user_idx").on(table.userId, table.createdAt),
     index("wallet_ledger_reading_idx").on(table.readingId),
+    index("wallet_ledger_message_idx").on(table.messageId),
     check(
       "wallet_ledger_balances_nonnegative",
       sql`${table.balanceBefore} >= 0 AND ${table.balanceAfter} >= 0`,
@@ -343,9 +468,12 @@ export const notificationDeliveries = pgTable(
   "notification_deliveries",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    readingId: uuid("reading_id")
-      .notNull()
-      .references(() => readingSessions.id, { onDelete: "cascade" }),
+    readingId: uuid("reading_id").references(() => readingSessions.id, {
+      onDelete: "cascade",
+    }),
+    messageId: uuid("message_id").references(() => directMessages.id, {
+      onDelete: "cascade",
+    }),
     recipientId: uuid("recipient_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -359,10 +487,15 @@ export const notificationDeliveries = pgTable(
     updatedAt,
   },
   (table) => [
-    uniqueIndex("notification_delivery_reading_recipient_channel_uidx").on(
-      table.readingId,
-      table.recipientId,
-      table.channel,
+    uniqueIndex("notification_delivery_reading_recipient_channel_uidx")
+      .on(table.readingId, table.recipientId, table.channel)
+      .where(sql`${table.readingId} IS NOT NULL`),
+    uniqueIndex("notification_delivery_message_recipient_channel_uidx")
+      .on(table.messageId, table.recipientId, table.channel)
+      .where(sql`${table.messageId} IS NOT NULL`),
+    check(
+      "notification_deliveries_one_source",
+      sql`(${table.readingId} IS NOT NULL AND ${table.messageId} IS NULL) OR (${table.readingId} IS NULL AND ${table.messageId} IS NOT NULL)`,
     ),
   ],
 );

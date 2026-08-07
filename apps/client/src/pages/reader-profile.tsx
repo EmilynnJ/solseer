@@ -94,6 +94,14 @@ export function ReaderProfilePage() {
           <p className="verified">
             <ShieldCheck /> Verified SoulSeer Reader
           </p>
+          {auth.me?.user.role === "client" && (
+            <Button
+              className="secondary"
+              onClick={() => navigate(`/messages?reader=${reader.id}`)}
+            >
+              <MessageCircle /> Message Reader
+            </Button>
+          )}
         </div>
       </section>
       <section className="offerings">

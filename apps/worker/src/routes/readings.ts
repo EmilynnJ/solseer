@@ -435,6 +435,7 @@ async function history(env: Env, role: "client" | "reader", userId: string) {
       pricePerMinute: readingSessions.pricePerMinute,
       durationSeconds: readingSessions.durationSeconds,
       totalPrice: readingSessions.totalPrice,
+      createdAt: readingSessions.createdAt,
       startedAt: readingSessions.startedAt,
       completedAt: readingSessions.completedAt,
       counterpartName: users.username,

@@ -12,6 +12,7 @@ import { adminRoutes } from "./routes/admin";
 import { authRoutes } from "./routes/auth";
 import { forumRoutes } from "./routes/forum";
 import { paymentRoutes } from "./routes/payments";
+import { messageRoutes } from "./routes/messages";
 import { publicRoutes } from "./routes/public";
 import { readerRoutes } from "./routes/readers";
 import { readingRoutes } from "./routes/readings";
@@ -51,8 +52,8 @@ async function resolveAccountSecrets(env: Env): Promise<Env> {
   if (accountBindings.length === 0) return env;
 
   const resolvedEntries = await Promise.all(
-    accountBindings.map(async ([name, binding]) =>
-      [name, await binding.get()] as const,
+    accountBindings.map(
+      async ([name, binding]) => [name, await binding.get()] as const,
     ),
   );
 
@@ -90,6 +91,7 @@ app.route("/api/auth", authRoutes);
 app.route("/api/readers", readerRoutes);
 app.route("/api/readings", readingRoutes);
 app.route("/api/payments", paymentRoutes);
+app.route("/api/messages", messageRoutes);
 app.route("/api/forum", forumRoutes);
 app.route("/api/admin", adminRoutes);
 app.route("/api/uploads", uploadRoutes);

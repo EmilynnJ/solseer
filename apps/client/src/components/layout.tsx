@@ -79,6 +79,11 @@ export function Layout() {
           ))}
           {sessionUser ? (
             <>
+              {me?.user.role !== "admin" && (
+                <NavLink to="/messages" aria-label="Messages">
+                  <MessageCircle size={17} /> Messages
+                </NavLink>
+              )}
               <NavLink to="/dashboard" aria-label="Dashboard">
                 <UserRound size={17} /> {me?.user.username ?? "Dashboard"}
               </NavLink>
@@ -113,7 +118,8 @@ export function Layout() {
           <Link to="/help">Help</Link>
           <a
             href={
-              import.meta.env.VITE_FACEBOOK_GROUP_URL || "https://www.facebook.com"
+              import.meta.env.VITE_FACEBOOK_GROUP_URL ||
+              "https://www.facebook.com"
             }
             target="_blank"
             rel="noreferrer"
@@ -121,7 +127,9 @@ export function Layout() {
             <Globe2 size={16} /> Facebook
           </a>
           <a
-            href={import.meta.env.VITE_DISCORD_INVITE_URL || "https://discord.com"}
+            href={
+              import.meta.env.VITE_DISCORD_INVITE_URL || "https://discord.com"
+            }
             target="_blank"
             rel="noreferrer"
           >

@@ -50,6 +50,13 @@
       "when": 1785625800000,
       "tag": "0006_profile_and_reader_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786035600000,
+      "tag": "0007_premium_messaging",
+      "breakpoints": true
     }
   ]
 }

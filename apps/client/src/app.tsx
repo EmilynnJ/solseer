@@ -36,6 +36,11 @@ const DashboardPage = lazy(() =>
 const ReadingPage = lazy(() =>
   import("./pages/reading").then((module) => ({ default: module.ReadingPage })),
 );
+const MessagesPage = lazy(() =>
+  import("./pages/messages").then((module) => ({
+    default: module.MessagesPage,
+  })),
+);
 const HelpPage = lazy(() =>
   import("./pages/info").then((module) => ({ default: module.HelpPage })),
 );
@@ -80,6 +85,14 @@ export function App() {
                   element={
                     <Protected>
                       <ReadingPage />
+                    </Protected>
+                  }
+                />
+                <Route
+                  path="messages"
+                  element={
+                    <Protected>
+                      <MessagesPage />
                     </Protected>
                   }
                 />
