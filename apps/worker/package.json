@@ -24,7 +24,7 @@
     "zod": "*"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "*",
+    "@cloudflare/vitest-pool-workers": "^0.20.3",
     "@cloudflare/workers-types": "*",
     "@eslint/js": "*",
     "@types/node": "*",
@@ -35,6 +35,6 @@
     "tsx": "*",
     "typescript-eslint": "*",
     "vitest": "*",
-    "wrangler": "*"
+    "wrangler": "^4.120.0"
   }
 }
