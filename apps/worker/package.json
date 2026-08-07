@@ -15,26 +15,26 @@
     "db:migrate": "tsx scripts/migrate.ts"
   },
   "dependencies": {
-    "@neondatabase/serverless": "latest",
+    "@neondatabase/serverless": "*",
     "@soulseer/shared": "*",
-    "drizzle-orm": "latest",
-    "hono": "latest",
-    "jose": "latest",
-    "stripe": "latest",
-    "zod": "latest"
+    "drizzle-orm": "*",
+    "hono": "^4.13.0",
+    "jose": "*",
+    "stripe": "*",
+    "zod": "*"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "latest",
-    "@cloudflare/workers-types": "latest",
-    "@types/node": "latest",
-    "@eslint/js": "latest",
-    "drizzle-kit": "latest",
-    "eslint": "latest",
-    "eslint-plugin-import-x": "latest",
-    "globals": "latest",
-    "tsx": "latest",
-    "typescript-eslint": "latest",
-    "vitest": "latest",
-    "wrangler": "latest"
+    "@cloudflare/vitest-pool-workers": "*",
+    "@cloudflare/workers-types": "*",
+    "@eslint/js": "*",
+    "@types/node": "*",
+    "drizzle-kit": "*",
+    "eslint": "*",
+    "eslint-plugin-import-x": "*",
+    "globals": "*",
+    "tsx": "*",
+    "typescript-eslint": "*",
+    "vitest": "*",
+    "wrangler": "*"
   }
 }
