@@ -6,14 +6,11 @@ import { createDatabase } from "../lib/db";
 
 export const publicRoutes = new Hono<AppBindings>();
 
-const release = "2026-08-08-realtimekit-bindings-v1";
-
 publicRoutes.get("/health", (context) =>
   context.json({
     status: "ok",
     service: "soulseer-api",
     environment: context.env.ENVIRONMENT,
-    release,
   }),
 );
 

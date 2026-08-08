@@ -90,11 +90,11 @@ store_id = "ff0046cedef447d2a6a84d137b2fd0c3"
 secret_name = "STRIPE_WEBHOOK_SECRET"
 
 [[env.production.secrets_store_secrets]]
-binding = "CLOUDFLARE_REALTIME_APP_ID"
+binding = "REALTIMEKIT_APP_ID"
 store_id = "ff0046cedef447d2a6a84d137b2fd0c3"
 secret_name = "CLOUDFLARE_REALTIME_APP_ID"
 
 [[env.production.secrets_store_secrets]]
-binding = "CLOUDFLARE_REALTIME_TOKEN"
+binding = "CLOUDFLARE_REALTIMEKIT_API_TOKEN"
 store_id = "ff0046cedef447d2a6a84d137b2fd0c3"
 secret_name = "CLOUDFLARE_REALTIME_TOKEN"

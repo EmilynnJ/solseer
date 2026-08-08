@@ -8,10 +8,6 @@ import {
   securityHeaders,
 } from "./lib/http";
 import { logger } from "./lib/log";
-import {
-  AccountSecretResolutionError,
-  resolveAccountSecrets,
-} from "./lib/env";
 import { adminRoutes } from "./routes/admin";
 import { authRoutes } from "./routes/auth";
 import { forumRoutes } from "./routes/forum";
@@ -25,6 +21,47 @@ import { transactionRoutes, userRoutes } from "./routes/user";
 import { webhookRoutes } from "./routes/webhooks";
 
 export { ReadingCoordinator } from "./durable/reading-coordinator";
+
+const accountSecretNames = [
+  "NEON_AUTH_ISSUER",
+  "NEON_AUTH_JWKS_URL",
+  "STRIPE_SECRET_KEY",
+  "STRIPE_WEBHOOK_SECRET",
+  "REALTIMEKIT_APP_ID",
+  "CLOUDFLARE_REALTIMEKIT_API_TOKEN",
+  "TELNYX_API_KEY",
+  "TELNYX_FROM_NUMBER",
+] as const;
+
+type SecretStoreBinding = { get(): Promise<string> };
+
+function isSecretStoreBinding(value: unknown): value is SecretStoreBinding {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "get" in value &&
+    typeof (value as SecretStoreBinding).get === "function"
+  );
+}
+
+async function resolveAccountSecrets(env: Env): Promise<Env> {
+  const accountBindings = accountSecretNames.flatMap((name) => {
+    const binding = env[name] as unknown;
+    return isSecretStoreBinding(binding) ? [[name, binding] as const] : [];
+  });
+  if (accountBindings.length === 0) return env;
+
+  const resolvedEntries = await Promise.all(
+    accountBindings.map(
+      async ([name, binding]) => [name, await binding.get()] as const,
+    ),
+  );
+
+  return {
+    ...env,
+    ...Object.fromEntries(resolvedEntries),
+  } as Env;
+}
 
 const app = new Hono<AppBindings>();
 
@@ -78,30 +115,10 @@ app.onError((error, context) => errorResponse(error, context));
 
 export default {
   async fetch(request: Request, env: Env, executionContext: ExecutionContext) {
-    try {
-      return await app.fetch(
-        request,
-        await resolveAccountSecrets(env),
-        executionContext,
-      );
-    } catch (error) {
-      if (!(error instanceof AccountSecretResolutionError)) throw error;
-      const requestId = request.headers.get("CF-Ray") ?? crypto.randomUUID();
-      logger.error(
-        "Worker secret binding resolution failed",
-        { requestId, operation: "resolve_account_secret" },
-        { bindingName: error.bindingName },
-      );
-      return Response.json(
-        {
-          error: {
-            code: "WORKER_SECRET_UNAVAILABLE",
-            message: "A required service credential is unavailable.",
-            requestId,
-          },
-        },
-        { status: 500, headers: { "X-Request-Id": requestId } },
-      );
-    }
+    return app.fetch(
+      request,
+      await resolveAccountSecrets(env),
+      executionContext,
+    );
   },
 };
