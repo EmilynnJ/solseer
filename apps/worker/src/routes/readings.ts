@@ -225,7 +225,15 @@ readingRoutes.post(
           // pending keeps the request visible to the Reader and prevents one
           // failed room setup from becoming "no longer available".
           status: "pending",
-          failureReason: null,
+          // Persist only Cloudflare's non-sensitive status/code so a production
+          // failure remains diagnosable without exposing either credential.
+          failureReason: [
+            `realtimekit_${stage}_failed`,
+            `status_${providerStatus}`,
+            ...(providerCodes.length > 0
+              ? providerCodes.slice(0, 3).map((code) => `code_${code}`)
+              : ["code_none"]),
+          ].join(":"),
           updatedAt: new Date(),
         })
         .where(

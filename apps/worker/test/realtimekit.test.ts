@@ -79,17 +79,41 @@ describe("RealtimeKit preset discovery", () => {
     });
   });
 
+  it("accepts direct Worker secret names as a runtime fallback", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          data: { id: "182bd5e5-6e1a-4fe4-a799-aa6d9a6ab26e" },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const directSecretEnv = {
+      CLOUDFLARE_ACCOUNT_ID: "account-id",
+      CLOUDFLARE_REALTIME_APP_ID: "direct-app-id",
+      CLOUDFLARE_REALTIME_TOKEN: "direct-token",
+    } as unknown as Env;
+
+    await createMeeting(directSecretEnv, "reading-id");
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/realtime/kit/direct-app-id/meetings");
+    expect(new Headers(init.headers).get("Authorization")).toBe(
+      "Bearer direct-token",
+    );
+  });
+
   it("preserves Cloudflare's status and error code for safe diagnostics", async () => {
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
-          new Response(JSON.stringify({ errors: [{ code: 10000 }] }), {
-            status: 403,
-            headers: { "Content-Type": "application/json" },
-          }),
-        ),
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ errors: [{ code: 10000 }] }), {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
     );
 
     await expect(createMeeting(realtimeKitEnv, "reading-id")).rejects.toEqual(

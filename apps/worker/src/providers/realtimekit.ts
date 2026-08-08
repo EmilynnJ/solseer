@@ -56,6 +56,18 @@ type RealtimeKitConfig = Pick<
   | "CLOUDFLARE_REALTIMEKIT_API_TOKEN"
 >;
 
+function runtimeString(
+  env: RealtimeKitConfig,
+  ...names: string[]
+): string | undefined {
+  const bindings = env as unknown as Record<string, unknown>;
+  for (const name of names) {
+    const value = bindings[name];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return undefined;
+}
+
 function requiredConfig(
   value: string | undefined,
   code: string,
@@ -70,7 +82,11 @@ function requiredConfig(
 
 function apiToken(env: RealtimeKitConfig, stage: RealtimeKitStage): string {
   const token = requiredConfig(
-    env.CLOUDFLARE_REALTIMEKIT_API_TOKEN,
+    runtimeString(
+      env,
+      "CLOUDFLARE_REALTIME_TOKEN",
+      "CLOUDFLARE_REALTIMEKIT_API_TOKEN",
+    ),
     "missing_api_token",
     stage,
   )
@@ -88,7 +104,11 @@ function apiBase(env: RealtimeKitConfig, stage: RealtimeKitStage): string {
     "missing_account_id",
     stage,
   );
-  const appId = requiredConfig(env.REALTIMEKIT_APP_ID, "missing_app_id", stage);
+  const appId = requiredConfig(
+    runtimeString(env, "CLOUDFLARE_REALTIME_APP_ID", "REALTIMEKIT_APP_ID"),
+    "missing_app_id",
+    stage,
+  );
   return `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/realtime/kit/${encodeURIComponent(appId)}`;
 }
 
