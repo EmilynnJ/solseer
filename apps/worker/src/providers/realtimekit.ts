@@ -56,8 +56,40 @@ type RealtimeKitConfig = Pick<
   | "CLOUDFLARE_REALTIMEKIT_API_TOKEN"
 >;
 
-function apiBase(env: RealtimeKitConfig): string {
-  return `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/realtime/kit/${env.REALTIMEKIT_APP_ID}`;
+function requiredConfig(
+  value: string | undefined,
+  code: string,
+  stage: RealtimeKitStage,
+): string {
+  const normalized = value?.trim();
+  if (!normalized) {
+    throw new RealtimeKitProviderError(stage, 0, [code]);
+  }
+  return normalized;
+}
+
+function apiToken(env: RealtimeKitConfig, stage: RealtimeKitStage): string {
+  const token = requiredConfig(
+    env.CLOUDFLARE_REALTIMEKIT_API_TOKEN,
+    "missing_api_token",
+    stage,
+  )
+    .replace(/^Bearer\s+/i, "")
+    .trim();
+  if (!token) {
+    throw new RealtimeKitProviderError(stage, 0, ["missing_api_token"]);
+  }
+  return token;
+}
+
+function apiBase(env: RealtimeKitConfig, stage: RealtimeKitStage): string {
+  const accountId = requiredConfig(
+    env.CLOUDFLARE_ACCOUNT_ID,
+    "missing_account_id",
+    stage,
+  );
+  const appId = requiredConfig(env.REALTIMEKIT_APP_ID, "missing_app_id", stage);
+  return `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/realtime/kit/${encodeURIComponent(appId)}`;
 }
 
 async function request<T>(
@@ -68,14 +100,11 @@ async function request<T>(
   stage: RealtimeKitStage,
 ): Promise<T> {
   const headers = new Headers(init.headers);
-  headers.set(
-    "Authorization",
-    `Bearer ${env.CLOUDFLARE_REALTIMEKIT_API_TOKEN}`,
-  );
+  headers.set("Authorization", `Bearer ${apiToken(env, stage)}`);
   if (!headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  const response = await fetch(`${apiBase(env)}${path}`, {
+  const response = await fetch(`${apiBase(env, stage)}${path}`, {
     ...init,
     headers,
     signal: AbortSignal.timeout(10_000),
@@ -163,8 +192,6 @@ export async function createMeeting(
       body: JSON.stringify({
         title: `SoulSeer reading ${readingId}`,
         persist_chat: true,
-        status: "ACTIVE",
-        session_keep_alive_time_in_secs: 120,
       }),
     },
     meetingResponseSchema,
@@ -227,11 +254,11 @@ export async function endSession(
   meetingId: string,
 ): Promise<void> {
   const response = await fetch(
-    `${apiBase(env)}/meetings/${meetingId}/active-session/kick-all`,
+    `${apiBase(env, "end_session")}/meetings/${meetingId}/active-session/kick-all`,
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${env.CLOUDFLARE_REALTIMEKIT_API_TOKEN}`,
+        Authorization: `Bearer ${apiToken(env, "end_session")}`,
       },
       signal: AbortSignal.timeout(10_000),
     },
@@ -249,15 +276,18 @@ export async function disableMeeting(
   env: RealtimeKitConfig,
   meetingId: string,
 ): Promise<void> {
-  const response = await fetch(`${apiBase(env)}/meetings/${meetingId}`, {
-    method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${env.CLOUDFLARE_REALTIMEKIT_API_TOKEN}`,
-      "Content-Type": "application/json",
+  const response = await fetch(
+    `${apiBase(env, "disable_meeting")}/meetings/${meetingId}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${apiToken(env, "disable_meeting")}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ status: "INACTIVE" }),
+      signal: AbortSignal.timeout(10_000),
     },
-    body: JSON.stringify({ status: "INACTIVE" }),
-    signal: AbortSignal.timeout(10_000),
-  });
+  );
   if (!response.ok) {
     throw new AppError(
       502,

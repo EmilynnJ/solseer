@@ -195,6 +195,10 @@ readingRoutes.post(
     } catch (error) {
       const stage =
         error instanceof RealtimeKitProviderError ? error.stage : "unknown";
+      const providerStatus =
+        error instanceof RealtimeKitProviderError ? error.providerStatus : 0;
+      const providerCodes =
+        error instanceof RealtimeKitProviderError ? error.providerCodes : [];
       logger.error(
         "RealtimeKit reading preflight failed",
         {
@@ -217,16 +221,30 @@ readingRoutes.post(
       await db
         .update(readingSessions)
         .set({
-          status: "failed",
-          failureReason: `realtimekit_${stage}_failed`,
+          // A provider/configuration failure is retryable. Returning this row to
+          // pending keeps the request visible to the Reader and prevents one
+          // failed room setup from becoming "no longer available".
+          status: "pending",
+          failureReason: null,
           updatedAt: new Date(),
         })
-        .where(eq(readingSessions.id, readingId));
-      throw new AppError(
-        502,
-        "REALTIMEKIT_PREFLIGHT_FAILED",
-        "The private reading room could not be prepared. No funds were charged.",
-      );
+        .where(
+          and(
+            eq(readingSessions.id, readingId),
+            eq(readingSessions.status, "preflight"),
+          ),
+        );
+      const message =
+        providerStatus === 401 || providerStatus === 403
+          ? "RealtimeKit rejected the configured API token or its Realtime permission. The request is still available to retry."
+          : providerStatus === 404
+            ? "RealtimeKit could not find the configured App ID in this Cloudflare account. The request is still available to retry."
+            : "The private reading room could not be prepared. The request is still available to retry and no funds were charged.";
+      throw new AppError(502, "REALTIMEKIT_PREFLIGHT_FAILED", message, {
+        stage,
+        providerStatus,
+        providerCodes,
+      });
     }
   },
 );
