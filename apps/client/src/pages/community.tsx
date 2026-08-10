@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import type { ForumComment, ForumPost } from "../types";
 import { api, dateTime } from "../lib/api";
+import { posthog } from "../lib/posthog";
 import { useApiData } from "../hooks/use-api";
 import { useSoulAuth } from "../components/auth-context";
 import {
@@ -179,6 +180,9 @@ function PostComposer({
     event.preventDefault();
     try {
       await api("/forum/posts", { method: "POST", body: JSON.stringify(form) });
+      posthog.capture("community_post_published", {
+        category: form.category,
+      });
       await onCreated();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to publish.");
@@ -257,6 +261,9 @@ function PostThread({
       await api(`/forum/posts/${id}/comments`, {
         method: "POST",
         body: JSON.stringify({ body: reply, parentId }),
+      });
+      posthog.capture("community_comment_published", {
+        is_reply: Boolean(parentId),
       });
       setReply("");
       setParentId(undefined);

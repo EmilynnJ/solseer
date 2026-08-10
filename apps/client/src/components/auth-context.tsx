@@ -11,6 +11,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import type { MeResponse } from "../types";
 import { api, isProfileRequiredError } from "../lib/api";
 import { authClient } from "../lib/auth";
+import { posthog } from "../lib/posthog";
 import { Loading } from "./ui";
 
 type AuthState = {
@@ -62,6 +63,22 @@ export function SoulAuthProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (session.isPending) return;
+
+    const user = session.data?.user;
+    if (!user) {
+      posthog.reset();
+      return;
+    }
+
+    posthog.identify(user.id, {
+      email: user.email,
+      name: user.name,
+    });
+  }, [session.data?.user, session.isPending]);
+
   const value = useMemo<AuthState>(
     () => ({
       me,

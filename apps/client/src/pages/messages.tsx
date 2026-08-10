@@ -15,6 +15,7 @@ import {
 import { useSearchParams } from "react-router-dom";
 import type { DirectMessage, MessageConversation } from "../types";
 import { api, dateTime, money } from "../lib/api";
+import { posthog } from "../lib/posthog";
 import { useSoulAuth } from "../components/auth-context";
 import { Button, Empty, Loading, Notice, PageIntro } from "../components/ui";
 
@@ -128,6 +129,10 @@ export function MessagesPage() {
           body: JSON.stringify({ readerId, body }),
         },
       );
+      posthog.capture("message_sent", {
+        message_kind: "client_free",
+        conversation_started: true,
+      });
       setBody("");
       await loadConversations();
       setSelectedId(result.conversationId);
@@ -168,6 +173,10 @@ export function MessagesPage() {
             : { body, paid: false },
         ),
       });
+      posthog.capture("message_sent", {
+        message_kind: isReader && paid ? "reader_paid" : "free",
+        conversation_started: false,
+      });
       setBody("");
       await Promise.all([loadThread(selectedId), loadConversations()]);
     } catch (cause) {
@@ -191,6 +200,9 @@ export function MessagesPage() {
       await api(`/messages/messages/${message.id}/unlock`, {
         method: "POST",
         headers: { "Idempotency-Key": crypto.randomUUID() },
+      });
+      posthog.capture("paid_message_unlocked", {
+        price_cents: message.priceCents,
       });
       if (selectedId) {
         await Promise.all([

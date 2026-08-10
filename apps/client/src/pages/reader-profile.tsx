@@ -11,6 +11,7 @@ import type { Reader, Review } from "../types";
 import { API_ORIGIN, api, dateTime, money } from "../lib/api";
 import { useApiData } from "../hooks/use-api";
 import { useSoulAuth } from "../components/auth-context";
+import { posthog } from "../lib/posthog";
 import { Button, Loading, Notice, Stars } from "../components/ui";
 
 export function ReaderProfilePage() {
@@ -40,6 +41,7 @@ export function ReaderProfilePage() {
         "/readings/on-demand",
         { method: "POST", body: JSON.stringify({ readerId: id, type }) },
       );
+      posthog.capture("reading_requested", { reading_type: type });
       navigate(`/reading/${result.reading.id}`);
     } catch (cause) {
       setError(
