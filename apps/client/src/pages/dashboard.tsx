@@ -25,6 +25,7 @@ import { API_ORIGIN, api, dateTime, duration, money } from "../lib/api";
 import { useApiData } from "../hooks/use-api";
 import { useSoulAuth } from "../components/auth-context";
 import { authClient, getAccessToken } from "../lib/auth";
+import { posthog } from "../lib/posthog";
 import {
   Button,
   Empty,
@@ -115,6 +116,7 @@ function ClientDashboard() {
       body: JSON.stringify({ confirmation }),
     });
     await authClient.deleteUser().catch(() => authClient.signOut());
+    posthog.reset();
     window.location.assign("/");
   }
   return (
@@ -242,6 +244,7 @@ function TopUpModal({
           body: JSON.stringify({ amountCents: chosen }),
         },
       );
+      posthog.capture("payment_intent_created", { amount_cents: chosen });
       setSecret(result.clientSecret);
     } catch (cause) {
       setError(
@@ -334,6 +337,7 @@ function PaymentForm({ onComplete }: { onComplete: () => Promise<void> }) {
       return;
     }
     await onComplete();
+    posthog.capture("balance_top_up_completed");
   }
   return (
     <form className="stripe-form" onSubmit={pay}>
@@ -412,6 +416,9 @@ function ReaderDashboard() {
       body: JSON.stringify({ isOnline: !reader?.isOnline }),
     });
     await refreshMe();
+    posthog.capture("reader_availability_changed", {
+      is_online: !reader?.isOnline,
+    });
     setSaving(false);
   }
   async function saveRates(e: FormEvent) {

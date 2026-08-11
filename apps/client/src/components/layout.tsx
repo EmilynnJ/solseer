@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { authClient } from "../lib/auth";
+import { posthog } from "../lib/posthog";
 import { useSoulAuth } from "./auth-context";
 
 const nav = [
@@ -25,6 +26,7 @@ export function Layout() {
   const navigate = useNavigate();
   async function signOut() {
     await authClient.signOut();
+    posthog.reset();
     await navigate("/");
   }
   return (

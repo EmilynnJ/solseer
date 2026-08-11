@@ -16,6 +16,7 @@ import {
 import { RtkMeeting } from "@cloudflare/realtimekit-react-ui";
 import type { Reading } from "../types";
 import { api, duration, money } from "../lib/api";
+import { posthog } from "../lib/posthog";
 import { useApiData } from "../hooks/use-api";
 import { Button, Loading, Notice } from "../components/ui";
 
@@ -114,6 +115,9 @@ function WaitingRoom({
     if (!confirm("Cancel this reading request?")) return;
     try {
       await api(`/readings/${detail.reading.id}/end`, { method: "POST" });
+      posthog.capture("reading_cancelled", {
+        reading_type: detail.reading.type,
+      });
     } finally {
       navigate("/dashboard");
     }
@@ -208,6 +212,7 @@ function LiveRoom({
     )
       return;
     await api(`/readings/${detail.reading.id}/end`, { method: "POST" });
+    posthog.capture("reading_ended", { reading_type: detail.reading.type });
     await meeting?.leave();
     await refresh();
   }
@@ -283,6 +288,10 @@ function SessionSummary({
       await api(`/readings/${detail.reading.id}/rate`, {
         method: "POST",
         body: JSON.stringify({ rating, review: review || undefined }),
+      });
+      posthog.capture("reading_review_submitted", {
+        rating,
+        reading_type: detail.reading.type,
       });
       setMessage("Thank you. Your reflection has been shared.");
       onRated();

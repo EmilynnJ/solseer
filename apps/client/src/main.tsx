@@ -9,6 +9,7 @@ import "@fontsource/manrope/600.css";
 import "@neondatabase/neon-js/ui/css";
 import "./styles.css";
 import { App } from "./app";
+import "./lib/posthog";
 
 inject();
 

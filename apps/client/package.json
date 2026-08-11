@@ -22,6 +22,7 @@
     "@stripe/stripe-js": "latest",
     "@vercel/analytics": "^2.0.1",
     "lucide-react": "latest",
+    "posthog-js": "^1.415.1",
     "react": "latest",
     "react-dom": "latest",
     "react-router-dom": "7.18.2",
