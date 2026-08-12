@@ -52,21 +52,9 @@ const providerErrorResponseSchema = z.object({
 type RealtimeKitConfig = Pick<
   Env,
   | "CLOUDFLARE_ACCOUNT_ID"
-  | "REALTIMEKIT_APP_ID"
+  | "CLOUDFLARE_REALTIMEKIT_APP_ID"
   | "CLOUDFLARE_REALTIMEKIT_API_TOKEN"
 >;
-
-function runtimeString(
-  env: RealtimeKitConfig,
-  ...names: string[]
-): string | undefined {
-  const bindings = env as unknown as Record<string, unknown>;
-  for (const name of names) {
-    const value = bindings[name];
-    if (typeof value === "string" && value.trim()) return value;
-  }
-  return undefined;
-}
 
 function requiredConfig(
   value: string | undefined,
@@ -82,16 +70,7 @@ function requiredConfig(
 
 function apiToken(env: RealtimeKitConfig, stage: RealtimeKitStage): string {
   const token = requiredConfig(
-    runtimeString(
-      env,
-      "CLOUDFLARE_REALTIMEKIT_API_TOKEN",
-      "REALTIMEKIT_API_TOKEN",
-      "CLOUDFLARE_REALTIME_TOKEN",
-      "REALTIME_TOKEN",
-      "CLOUDFLARE_REALTIME_API_TOKEN",
-      "REALTIME_API_TOKEN",
-      "REALTIMEKIT_TOKEN",
-    ),
+    env.CLOUDFLARE_REALTIMEKIT_API_TOKEN,
     "missing_api_token",
     stage,
   )
@@ -110,16 +89,7 @@ function apiBase(env: RealtimeKitConfig, stage: RealtimeKitStage): string {
     stage,
   );
   const appId = requiredConfig(
-    runtimeString(
-      env,
-      "CLOUDFLARE_REALTIME_APP_ID",
-      "REALTIMEKIT_APP_ID",
-      "REALTIMEKIT_API_APP_ID",
-      "CLOUDFLARE_REALTIMEKIT_APP_ID",
-      "REALTIMEKIT_APP_ID_API",
-      "REALTIMEKIT_APP_API_ID",
-      "REALTIME_APP_ID",
-    ),
+    env.CLOUDFLARE_REALTIMEKIT_APP_ID,
     "missing_app_id",
     stage,
   );
@@ -205,9 +175,6 @@ export function selectParticipantPresets(names: string[]): {
 export async function resolveParticipantPresets(
   _env: RealtimeKitConfig,
 ): Promise<{ client: string; reader: string }> {
-  // Apps created in the Cloudflare dashboard always receive these defaults.
-  // Starting a reading must not depend on the separate preset-list permission:
-  // the Add Participant API is the authoritative validation point.
   return {
     client: "group-call-participant",
     reader: "group-call-host",
@@ -245,7 +212,7 @@ export async function addParticipant(
 ): Promise<{ id: string; token: string }> {
   const result = await request(
     env,
-    `/meetings/${input.meetingId}/participants`,
+    `/meetings/${encodeURIComponent(input.meetingId)}/participants`,
     {
       method: "POST",
       body: JSON.stringify({
@@ -275,7 +242,7 @@ export async function refreshParticipantToken(
 ): Promise<string> {
   const result = await request(
     env,
-    `/meetings/${meetingId}/participants/${participantId}/token`,
+    `/meetings/${encodeURIComponent(meetingId)}/participants/${encodeURIComponent(participantId)}/token`,
     { method: "POST", body: "{}" },
     refreshedTokenResponseSchema,
     "participant_token",
@@ -288,7 +255,7 @@ export async function endSession(
   meetingId: string,
 ): Promise<void> {
   const response = await fetch(
-    `${apiBase(env, "end_session")}/meetings/${meetingId}/active-session/kick-all`,
+    `${apiBase(env, "end_session")}/meetings/${encodeURIComponent(meetingId)}/active-session/kick-all`,
     {
       method: "POST",
       headers: {
@@ -311,7 +278,7 @@ export async function disableMeeting(
   meetingId: string,
 ): Promise<void> {
   const response = await fetch(
-    `${apiBase(env, "disable_meeting")}/meetings/${meetingId}`,
+    `${apiBase(env, "disable_meeting")}/meetings/${encodeURIComponent(meetingId)}`,
     {
       method: "PATCH",
       headers: {
