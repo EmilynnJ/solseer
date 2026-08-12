@@ -47,10 +47,7 @@ function isSecretStoreBinding(value: unknown): value is SecretStoreBinding {
 }
 
 async function resolveAccountSecrets(env: Env): Promise<Env> {
-  const keys = new Set<string>([
-    ...accountSecretNames,
-    ...Object.keys(env || {}),
-  ]);
+  const keys = new Set<string>([...accountSecretNames, ...Object.keys(env)]);
 
   const accountBindings: [string, SecretStoreBinding][] = [];
   for (const key of keys) {
@@ -62,17 +59,40 @@ async function resolveAccountSecrets(env: Env): Promise<Env> {
 
   if (accountBindings.length === 0) return env;
 
-  const resolvedEntries: [string, string][] = [];
-  for (const [name, binding] of accountBindings) {
-    try {
+  const settled = await Promise.allSettled(
+    accountBindings.map(async ([name, binding]) => {
       const secret = await binding.get();
+      return [name, secret] as const;
+    }),
+  );
+
+  const resolvedEntries: [string, string][] = [];
+  settled.forEach((result, index) => {
+    const name = accountBindings[index]?.[0];
+    if (!name) return;
+    if (result.status === "fulfilled") {
+      const [, secret] = result.value;
       if (typeof secret === "string") {
         resolvedEntries.push([name, secret]);
+        return;
       }
-    } catch {
-      // Gracefully ignore bindings that are not SecretsStoreSecret (e.g. DurableObjectNamespace, ColoLocalActorNamespace)
     }
-  }
+    // Declared secrets must resolve; surface failures instead of hiding them.
+    // Opportunistically probed bindings (non-secret objects exposing .get) are ignored.
+    if (
+      accountSecretNames.includes(name as (typeof accountSecretNames)[number])
+    ) {
+      logger.error("Failed to resolve account secret", undefined, {
+        secretBinding: name,
+        reason:
+          result.status === "rejected"
+            ? result.reason instanceof Error
+              ? result.reason.message
+              : "unknown_error"
+            : "non_string_value",
+      });
+    }
+  });
 
   return {
     ...env,
