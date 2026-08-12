@@ -27,6 +27,7 @@ const accountSecretNames = [
   "NEON_AUTH_JWKS_URL",
   "STRIPE_SECRET_KEY",
   "STRIPE_WEBHOOK_SECRET",
+  "REALTIMEKIT_APP_ID",
   "CLOUDFLARE_REALTIMEKIT_APP_ID",
   "CLOUDFLARE_REALTIMEKIT_API_TOKEN",
   "TELNYX_API_KEY",
@@ -40,46 +41,38 @@ function isSecretStoreBinding(value: unknown): value is SecretStoreBinding {
     typeof value === "object" &&
     value !== null &&
     "get" in value &&
-    typeof (value as SecretStoreBinding).get === "function"
+    typeof (value as SecretStoreBinding).get === "function" &&
+    !("idFromName" in value) && // Exclude DurableObjectNamespace
+    !("put" in value) // Exclude R2Bucket
   );
 }
 
 async function resolveAccountSecrets(env: Env): Promise<Env> {
-  const accountBindings = accountSecretNames.flatMap((name) => {
-    const binding = env[name as keyof Env] as unknown;
-    return isSecretStoreBinding(binding) ? [[name, binding] as const] : [];
-  });
+  const keys = new Set<string>([
+    ...accountSecretNames,
+    ...Object.keys(env || {}),
+  ]);
+
+  const accountBindings: [string, SecretStoreBinding][] = [];
+  for (const key of keys) {
+    const binding = env[key as keyof Env] as unknown;
+    if (isSecretStoreBinding(binding)) {
+      accountBindings.push([key, binding]);
+    }
+  }
 
   if (accountBindings.length === 0) return env;
 
-  const settled = await Promise.allSettled(
-    accountBindings.map(async ([name, binding]) => {
-      const secret = await binding.get();
-      if (typeof secret !== "string" || !secret.trim()) {
-        throw new Error("secret_resolved_to_empty_value");
-      }
-      return [name, secret] as const;
-    }),
-  );
-
   const resolvedEntries: [string, string][] = [];
-  for (let index = 0; index < settled.length; index += 1) {
-    const result = settled[index];
-    const name = accountBindings[index]?.[0];
-    if (!result || !name) continue;
-
-    if (result.status === "rejected") {
-      logger.error("Failed to resolve account secret", undefined, {
-        secretBinding: name,
-        reason:
-          result.reason instanceof Error
-            ? result.reason.message
-            : "unknown_secret_store_error",
-      });
-      throw new Error(`Failed to resolve required secret binding: ${name}`);
+  for (const [name, binding] of accountBindings) {
+    try {
+      const secret = await binding.get();
+      if (typeof secret === "string") {
+        resolvedEntries.push([name, secret]);
+      }
+    } catch {
+      // Gracefully ignore bindings that are not SecretsStoreSecret (e.g. DurableObjectNamespace, ColoLocalActorNamespace)
     }
-
-    resolvedEntries.push([result.value[0], result.value[1]]);
   }
 
   return {
