@@ -22,13 +22,13 @@ export class RealtimeKitProviderError extends Error {
 
 const meetingResponseSchema = z.object({
   success: z.literal(true),
-  data: z.object({ id: z.string().uuid() }),
+  data: z.object({ id: z.string().min(1) }),
 });
 
 const participantResponseSchema = z.object({
   success: z.literal(true),
   data: z.object({
-    id: z.string().uuid(),
+    id: z.string().min(1),
     token: z.string().min(1).optional(),
     auth_token: z.string().min(1).optional(),
   }),
@@ -84,8 +84,13 @@ function apiToken(env: RealtimeKitConfig, stage: RealtimeKitStage): string {
   const token = requiredConfig(
     runtimeString(
       env,
-      "CLOUDFLARE_REALTIME_TOKEN",
       "CLOUDFLARE_REALTIMEKIT_API_TOKEN",
+      "REALTIMEKIT_API_TOKEN",
+      "CLOUDFLARE_REALTIME_TOKEN",
+      "REALTIME_TOKEN",
+      "CLOUDFLARE_REALTIME_API_TOKEN",
+      "REALTIME_API_TOKEN",
+      "REALTIMEKIT_TOKEN",
     ),
     "missing_api_token",
     stage,
@@ -105,7 +110,16 @@ function apiBase(env: RealtimeKitConfig, stage: RealtimeKitStage): string {
     stage,
   );
   const appId = requiredConfig(
-    runtimeString(env, "CLOUDFLARE_REALTIME_APP_ID", "REALTIMEKIT_APP_ID"),
+    runtimeString(
+      env,
+      "CLOUDFLARE_REALTIME_APP_ID",
+      "REALTIMEKIT_APP_ID",
+      "REALTIMEKIT_API_APP_ID",
+      "CLOUDFLARE_REALTIMEKIT_APP_ID",
+      "REALTIMEKIT_APP_ID_API",
+      "REALTIMEKIT_APP_API_ID",
+      "REALTIME_APP_ID",
+    ),
     "missing_app_id",
     stage,
   );
