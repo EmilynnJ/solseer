@@ -125,3 +125,74 @@ describe("RealtimeKit preset discovery", () => {
     );
   });
 });
+
+describe("RealtimeKit Preflight and Initial Connection ID relaxation", () => {
+  it("allows non-UUID meeting ID inside createMeeting response", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          data: { id: "custom-non-uuid-meeting-id-12345" },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { createMeeting: createMeetingFn } = await import("../src/providers/realtimekit");
+    await expect(createMeetingFn(realtimeKitEnv, "reading-id")).resolves.toBe(
+      "custom-non-uuid-meeting-id-12345",
+    );
+  });
+
+  it("allows non-UUID participant ID inside addParticipant response (Preflight setup)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            id: "custom-non-uuid-participant-id-99999",
+            token: "mock-token-abc-123",
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { addParticipant: addParticipantFn } = await import("../src/providers/realtimekit");
+    const res = await addParticipantFn(realtimeKitEnv, {
+      meetingId: "meeting-abc",
+      appUserId: "user-123",
+      displayName: "Emilynn",
+      presetName: "group-call-host",
+    });
+
+    expect(res).toEqual({
+      id: "custom-non-uuid-participant-id-99999",
+      token: "mock-token-abc-123",
+    });
+  });
+
+  it("allows non-UUID participant ID inside refreshParticipantToken response", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          data: { token: "new-mock-token-456" },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { refreshParticipantToken: refreshParticipantTokenFn } = await import("../src/providers/realtimekit");
+    const token = await refreshParticipantTokenFn(
+      realtimeKitEnv,
+      "meeting-abc",
+      "custom-non-uuid-participant-id-99999",
+    );
+
+    expect(token).toBe("new-mock-token-456");
+  });
+});
