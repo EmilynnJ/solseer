@@ -1,5 +1,25 @@
 import type { MiddlewareHandler } from "hono";
+import { uuidSchema } from "@soulseer/shared";
 import { AppError } from "./errors";
+
+export function validateUuidParams(...names: string[]): MiddlewareHandler {
+  return async (context, next) => {
+    for (const name of names) {
+      const value = context.req.param(name);
+      if (value) {
+        const result = uuidSchema.safeParse(value);
+        if (!result.success) {
+          throw new AppError(
+            400,
+            "INVALID_UUID",
+            `The parameter '${name}' must be a valid UUID.`,
+          );
+        }
+      }
+    }
+    await next();
+  };
+}
 
 export const securityHeaders: MiddlewareHandler = async (context, next) => {
   await next();

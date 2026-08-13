@@ -16,6 +16,7 @@ import type { AppBindings } from "../types";
 import { requireRole, requireUser } from "../lib/auth";
 import { createDatabase } from "../lib/db";
 import { AppError } from "../lib/errors";
+import { validateUuidParams } from "../lib/http";
 
 export const readerRoutes = new Hono<AppBindings>();
 
@@ -74,7 +75,7 @@ readerRoutes.get("/online", async (context) =>
   context.json({ readers: await listReaders(context.env, true) }),
 );
 
-readerRoutes.get("/:id", async (context) => {
+readerRoutes.get("/:id", validateUuidParams("id"), async (context) => {
   const { db } = createDatabase(context.env.DATABASE_URL);
   const id = context.req.param("id");
   const [reader] = await db
@@ -108,7 +109,7 @@ readerRoutes.get("/:id", async (context) => {
   return context.json({ reader, reviews: recentReviews });
 });
 
-readerRoutes.get("/:id/image", async (context) => {
+readerRoutes.get("/:id/image", validateUuidParams("id"), async (context) => {
   const { db } = createDatabase(context.env.DATABASE_URL);
   const [reader] = await db
     .select({ key: readerProfiles.profileImageKey })

@@ -13,6 +13,7 @@ import type { AppBindings } from "../types";
 import { requireRole, requireUser } from "../lib/auth";
 import { createDatabase } from "../lib/db";
 import { AppError } from "../lib/errors";
+import { validateUuidParams } from "../lib/http";
 import {
   addParticipant,
   createMeeting,
@@ -85,6 +86,7 @@ readingRoutes.post(
   "/:id/accept",
   requireUser,
   requireRole("reader"),
+  validateUuidParams("id"),
   async (context) => {
     const user = context.get("user");
     const readingId = context.req.param("id");
@@ -257,7 +259,7 @@ readingRoutes.post(
   },
 );
 
-readingRoutes.post("/:id/participant-token", requireUser, async (context) => {
+readingRoutes.post("/:id/participant-token", requireUser, validateUuidParams("id"), async (context) => {
   const user = context.get("user");
   const { db } = createDatabase(context.env.DATABASE_URL);
   const [reading] = await db
@@ -299,7 +301,7 @@ readingRoutes.post("/:id/participant-token", requireUser, async (context) => {
   return context.json({ participantToken: token });
 });
 
-readingRoutes.post("/:id/end", requireUser, async (context) => {
+readingRoutes.post("/:id/end", requireUser, validateUuidParams("id"), async (context) => {
   const user = context.get("user");
   const { db } = createDatabase(context.env.DATABASE_URL);
   const [reading] = await db
@@ -329,6 +331,7 @@ readingRoutes.post(
   "/:id/rate",
   requireUser,
   requireRole("client"),
+  validateUuidParams("id"),
   async (context) => {
     const input = reviewSchema.parse(await context.req.json());
     const user = context.get("user");
@@ -400,7 +403,7 @@ readingRoutes.get(
   },
 );
 
-readingRoutes.get("/:id", requireUser, async (context) => {
+readingRoutes.get("/:id", requireUser, validateUuidParams("id"), async (context) => {
   const user = context.get("user");
   const { db } = createDatabase(context.env.DATABASE_URL);
   const [reading] = await db

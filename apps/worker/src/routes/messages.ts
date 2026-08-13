@@ -7,6 +7,7 @@ import type { AppBindings } from "../types";
 import { requireRole, requireUser } from "../lib/auth";
 import { createDatabase } from "../lib/db";
 import { AppError } from "../lib/errors";
+import { validateUuidParams } from "../lib/http";
 
 type DbRow = Record<string, unknown>;
 
@@ -192,7 +193,7 @@ messageRoutes.post("/conversations", async (context) => {
   }
 });
 
-messageRoutes.get("/conversations/:id", async (context) => {
+messageRoutes.get("/conversations/:id", validateUuidParams("id"), async (context) => {
   const user = context.get("user");
   const conversation = await findConversation(
     context.env.DATABASE_URL,
@@ -226,7 +227,7 @@ messageRoutes.get("/conversations/:id", async (context) => {
   });
 });
 
-messageRoutes.post("/conversations/:id/messages", async (context) => {
+messageRoutes.post("/conversations/:id/messages", validateUuidParams("id"), async (context) => {
   const user = context.get("user");
   const input = sendDirectMessageSchema.parse(await context.req.json());
   const conversation = await findConversation(
@@ -268,7 +269,7 @@ messageRoutes.post("/conversations/:id/messages", async (context) => {
   );
 });
 
-messageRoutes.post("/conversations/:id/read", async (context) => {
+messageRoutes.post("/conversations/:id/read", validateUuidParams("id"), async (context) => {
   const user = context.get("user");
   await findConversation(
     context.env.DATABASE_URL,
@@ -284,7 +285,7 @@ messageRoutes.post("/conversations/:id/read", async (context) => {
   return context.json({ ok: true });
 });
 
-messageRoutes.post("/messages/:id/unlock", async (context) => {
+messageRoutes.post("/messages/:id/unlock", validateUuidParams("id"), async (context) => {
   const user = context.get("user");
   if (user.role !== "client") {
     throw new AppError(

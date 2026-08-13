@@ -15,6 +15,7 @@ import type { AppBindings } from "../types";
 import { requireRole, requireUser } from "../lib/auth";
 import { createDatabase } from "../lib/db";
 import { AppError } from "../lib/errors";
+import { validateUuidParams } from "../lib/http";
 
 export const forumRoutes = new Hono<AppBindings>();
 
@@ -67,7 +68,7 @@ forumRoutes.post("/posts", requireUser, async (context) => {
   return context.json({ post }, 201);
 });
 
-forumRoutes.get("/posts/:id", async (context) => {
+forumRoutes.get("/posts/:id", validateUuidParams("id"), async (context) => {
   const { db } = createDatabase(context.env.DATABASE_URL);
   const [post] = await db
     .select({
@@ -109,7 +110,7 @@ forumRoutes.get("/posts/:id", async (context) => {
   return context.json({ post, comments });
 });
 
-forumRoutes.post("/posts/:id/comments", requireUser, async (context) => {
+forumRoutes.post("/posts/:id/comments", requireUser, validateUuidParams("id"), async (context) => {
   const input = createForumCommentSchema.parse(await context.req.json());
   const postId = context.req.param("id");
   const { db } = createDatabase(context.env.DATABASE_URL);
@@ -146,7 +147,7 @@ forumRoutes.post("/posts/:id/comments", requireUser, async (context) => {
   return context.json({ comment }, 201);
 });
 
-forumRoutes.post("/posts/:id/flag", requireUser, async (context) => {
+forumRoutes.post("/posts/:id/flag", requireUser, validateUuidParams("id"), async (context) => {
   const input = flagContentSchema.parse({
     ...(await context.req.json()),
     postId: context.req.param("id"),
@@ -159,7 +160,7 @@ forumRoutes.post("/posts/:id/flag", requireUser, async (context) => {
   return context.json({ flag }, 201);
 });
 
-forumRoutes.post("/comments/:id/flag", requireUser, async (context) => {
+forumRoutes.post("/comments/:id/flag", requireUser, validateUuidParams("id"), async (context) => {
   const input = flagContentSchema.parse({
     ...(await context.req.json()),
     commentId: context.req.param("id"),
@@ -176,6 +177,7 @@ forumRoutes.delete(
   "/posts/:id",
   requireUser,
   requireRole("admin"),
+  validateUuidParams("id"),
   async (context) => {
     const { db } = createDatabase(context.env.DATABASE_URL);
     const [post] = await db
@@ -193,6 +195,7 @@ forumRoutes.delete(
   "/comments/:id",
   requireUser,
   requireRole("admin"),
+  validateUuidParams("id"),
   async (context) => {
     const { db } = createDatabase(context.env.DATABASE_URL);
     const [comment] = await db
