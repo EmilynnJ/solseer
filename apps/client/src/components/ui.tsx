@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, PropsWithChildren, ReactNode } from "react";
+import { useEffect, useRef, type ButtonHTMLAttributes, type PropsWithChildren, type ReactNode } from "react";
 import { LoaderCircle, Star } from "lucide-react";
 
 export function Button({
@@ -73,14 +73,42 @@ export function Modal({
   children,
   onClose,
 }: PropsWithChildren<{ title: string; onClose: () => void }>) {
+  const modalRef = useRef<HTMLElement>(null);
+
+  // Focus modal on mount. Empty dependency array decouples focus logic
+  // to avoid focus stealing/resetting when the parent re-renders.
+  useEffect(() => {
+    if (modalRef.current) {
+      modalRef.current.focus();
+    }
+  }, []);
+
+  // Keyboard dismissal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
+
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section
+        ref={modalRef}
         className="modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        onMouseDown={(event) => event.stopPropagation()}
+        tabIndex={-1}
+        style={{ outline: "none" }}
+        onMouseDown={(event) => {
+          event.stopPropagation();
+        }}
       >
         <div className="modal-head">
           <h2 id="modal-title">{title}</h2>
