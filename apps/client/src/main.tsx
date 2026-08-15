@@ -8,6 +8,7 @@ import "@fontsource/manrope/400.css";
 import "@fontsource/manrope/600.css";
 import "@neondatabase/neon-js/ui/css";
 import "./styles.css";
+import "./reading-reentry.css";
 import { App } from "./app";
 import "./lib/posthog";
 
