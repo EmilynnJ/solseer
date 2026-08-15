@@ -1,0 +1,28 @@
+@media (max-width: 768px) {
+  .dashboard-section .table-scroll {
+    position: relative;
+  }
+
+  .dashboard-section .table-scroll td:has(> a[href^="/reading/"]) {
+    position: sticky;
+    right: 0;
+    z-index: 3;
+    min-width: 104px;
+    background: var(--surface);
+    box-shadow: -14px 0 22px rgba(10, 10, 15, 0.82);
+  }
+
+  .dashboard-section .table-scroll td > a[href^="/reading/"] {
+    min-height: 44px;
+    padding: 0.55rem 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--pink);
+    border-radius: 999px;
+    background: var(--pink);
+    color: #130914;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+}
