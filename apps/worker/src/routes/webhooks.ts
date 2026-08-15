@@ -267,10 +267,28 @@ function eventTime(payload: {
   return value ? new Date(value) : new Date();
 }
 
-async function downloadLimitedJson(
+export async function downloadLimitedJson(
   url: string,
   maxBytes: number,
 ): Promise<unknown> {
+  const parsedUrl = new URL(url);
+  if (parsedUrl.protocol !== "https:") {
+    throw new Error("Chat download URL must use HTTPS.");
+  }
+  const allowedDomains = [
+    "cloudflare.com",
+    "realtimekit.com",
+    "cloudflarestream.com",
+  ];
+  const isAllowed = allowedDomains.some(
+    (domain) =>
+      parsedUrl.hostname === domain ||
+      parsedUrl.hostname.endsWith(`.${domain}`),
+  );
+  if (!isAllowed) {
+    throw new Error("Chat download URL domain is not allowed.");
+  }
+
   const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
   if (!response.ok || !response.body)
     throw new Error("Chat replay download failed.");

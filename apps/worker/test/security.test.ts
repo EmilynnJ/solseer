@@ -1,8 +1,22 @@
 /* eslint-disable @typescript-eslint/no-deprecated -- SELF remains the typed fetch binding in this test configuration. */
 import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import { downloadLimitedJson } from "../src/routes/webhooks";
 
 describe("API security boundaries", () => {
+  it("rejects untrusted domains and non-HTTPS protocols in chat download URLs (SSRF prevention)", async () => {
+    await expect(
+      downloadLimitedJson("http://169.254.169.254/latest/meta-data", 1000),
+    ).rejects.toThrow("Chat download URL must use HTTPS.");
+
+    await expect(
+      downloadLimitedJson("https://malicious-domain.com/chat.json", 1000),
+    ).rejects.toThrow("Chat download URL domain is not allowed.");
+
+    await expect(
+      downloadLimitedJson("https://attacker.cloudflare.com.evil.com/chat.json", 1000),
+    ).rejects.toThrow("Chat download URL domain is not allowed.");
+  });
   it("rejects an unapproved browser origin", async () => {
     const response = await SELF.fetch("https://api.example.test/api/health", {
       headers: { Origin: "https://attacker.example" },
