@@ -16,13 +16,7 @@ export function LoginPage() {
     sessionStorage.getItem(PENDING_VERIFICATION_EMAIL) ?? "";
   const [mode, setMode] = useState<
     "signin" | "signup" | "verify" | "forgot" | "profile"
-  >(
-    pendingVerificationEmail
-      ? "verify"
-      : params.get("complete")
-        ? "profile"
-        : "signin",
-  );
+  >(pendingVerificationEmail ? "verify" : "signin");
   const [form, setForm] = useState({
     email: pendingVerificationEmail,
     password: "",
@@ -221,7 +215,7 @@ export function LoginPage() {
                 void authClient.signIn.social({
                   provider: "google",
                   callbackURL: `${window.location.origin}/login?${new URLSearchParams({
-                    complete: "1",
+                    returnTo,
                     ...(form.invite ? { readerInvite: form.invite } : {}),
                   }).toString()}`,
                 })
