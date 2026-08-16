@@ -9,10 +9,13 @@ export function ReaderCard({ reader }: { reader: Reader }) {
     <article className="reader-card reveal">
       <Link to={`/readers/${reader.id}`} className="reader-portrait-wrap">
         {reader.profileImageKey ? (
+          /* Performance optimization: lazy loading defer initial image fetching for off-screen cards in long lists; async decoding prevents main-thread layout jank */
           <img
             className="reader-portrait"
             src={`${API_ORIGIN}/api/readers/${reader.id}/image`}
             alt={`${reader.fullName}, SoulSeer Reader`}
+            loading="lazy"
+            decoding="async"
           />
         ) : (
           <div className="reader-portrait fallback" aria-hidden="true">
