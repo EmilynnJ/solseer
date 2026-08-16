@@ -141,8 +141,8 @@ export const validateUuidParams: MiddlewareHandler = async (context, next) => {
   const segments = pathname.split("/").filter(Boolean);
 
   for (let i = 1; i < segments.length; i++) {
-    const parent = segments[i - 1];
-    const candidate = segments[i];
+    const parent = segments[i - 1] ?? "";
+    const candidate = segments[i] ?? "";
 
     if (RESOURCE_PARENTS.has(parent) && !EXCLUDED_SLUGS.has(candidate)) {
       if (!UUID_REGEX.test(candidate)) {
