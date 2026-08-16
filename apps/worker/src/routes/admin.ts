@@ -24,6 +24,7 @@ import { randomToken, sha256 } from "../lib/crypto";
 import { createDatabase } from "../lib/db";
 import { AppError } from "../lib/errors";
 import { createStripe } from "../providers/stripe";
+import { validateUuidParams } from "../lib/http";
 
 const readerAdminUpdateSchema = z.object({
   fullName: z.string().trim().min(2).max(100).optional(),
@@ -135,7 +136,7 @@ adminRoutes.post("/readers", async (context) => {
   }
 });
 
-adminRoutes.patch("/readers/:id", async (context) => {
+adminRoutes.patch("/readers/:id", validateUuidParams("id"), async (context) => {
   const input = readerAdminUpdateSchema.parse(await context.req.json());
   const id = context.req.param("id");
   const actor = context.get("user");
@@ -174,7 +175,7 @@ adminRoutes.patch("/readers/:id", async (context) => {
   return context.json({ reader: profile });
 });
 
-adminRoutes.post("/readers/:id/connect", async (context) => {
+adminRoutes.post("/readers/:id/connect", validateUuidParams("id"), async (context) => {
   const readerId = context.req.param("id");
   const { db } = createDatabase(context.env.DATABASE_URL);
   const [reader] = await db
@@ -264,7 +265,7 @@ adminRoutes.post("/balance-adjust", async (context) => {
   return context.json({ result: result.rows[0]?.result });
 });
 
-adminRoutes.post("/refunds/:readingId", async (context) => {
+adminRoutes.post("/refunds/:readingId", validateUuidParams("readingId"), async (context) => {
   const input = adminRefundSchema.parse(await context.req.json());
   const { sql: neonSql } = createDatabase(context.env.DATABASE_URL);
   try {
@@ -293,7 +294,7 @@ adminRoutes.post("/refunds/:readingId", async (context) => {
   }
 });
 
-adminRoutes.post("/payouts/:readerId", async (context) => {
+adminRoutes.post("/payouts/:readerId", validateUuidParams("readerId"), async (context) => {
   const input = payoutRequestSchema.parse(await context.req.json());
   const { sql: neonSql, db } = createDatabase(context.env.DATABASE_URL);
   let reservation: {
@@ -376,7 +377,7 @@ adminRoutes.get("/forum/flagged", async (context) => {
   return context.json({ flags });
 });
 
-adminRoutes.patch("/forum/flags/:id", async (context) => {
+adminRoutes.patch("/forum/flags/:id", validateUuidParams("id"), async (context) => {
   const input = z
     .object({ status: z.enum(["dismissed", "actioned"]) })
     .parse(await context.req.json());

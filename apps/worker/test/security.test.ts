@@ -81,4 +81,12 @@ describe("API security boundaries", () => {
     expect(response.headers.get("X-Frame-Options")).toBe("DENY");
     expect(response.headers.get("Content-Security-Policy")).toContain("default-src 'none'");
   });
+
+  it("rejects invalid UUID parameters with 400 Bad Request", async () => {
+    const response = await SELF.fetch("https://api.example.test/api/readers/invalid-uuid-format");
+    expect(response.status).toBe(400);
+    const body = await response.json<{ error: { code: string; message: string } }>();
+    expect(body.error.code).toBe("INVALID_UUID");
+    expect(body.error.message).toContain("must be a valid UUID");
+  });
 });
