@@ -106,3 +106,50 @@ export const rateLimit: MiddlewareHandler<{ Bindings: Env }> = async (
   }
   await next();
 };
+
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const RESOURCE_PARENTS = new Set([
+  "readers",
+  "readings",
+  "conversations",
+  "messages",
+  "users",
+  "flags",
+  "posts",
+  "comments",
+  "payouts",
+  "refunds",
+]);
+
+const EXCLUDED_SLUGS = new Set([
+  "online",
+  "on-demand",
+  "conversations",
+  "flagged",
+  "financial-summary",
+  "balance-adjust",
+  "export",
+  "me",
+  "bootstrap",
+  "delete-account",
+]);
+
+export const validateUuidParams: MiddlewareHandler = async (context, next) => {
+  const pathname = new URL(context.req.url).pathname;
+  const segments = pathname.split("/").filter(Boolean);
+
+  for (let i = 1; i < segments.length; i++) {
+    const parent = segments[i - 1];
+    const candidate = segments[i];
+
+    if (RESOURCE_PARENTS.has(parent) && !EXCLUDED_SLUGS.has(candidate)) {
+      if (!UUID_REGEX.test(candidate)) {
+        throw new AppError(400, "INVALID_UUID", "Invalid identifier format.");
+      }
+    }
+  }
+
+  await next();
+};

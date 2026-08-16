@@ -6,6 +6,7 @@ import {
   exactOriginCors,
   rateLimit,
   securityHeaders,
+  validateUuidParams,
 } from "./lib/http";
 import { logger } from "./lib/log";
 import { adminRoutes } from "./routes/admin";
@@ -103,6 +104,7 @@ app.use("*", securityHeaders);
 app.use("/api/*", exactOriginCors);
 app.use("/api/*", boundedJson());
 app.use("/api/*", rateLimit);
+app.use("/api/*", validateUuidParams);
 
 app.route("/api", publicRoutes);
 app.route("/api/auth", authRoutes);
