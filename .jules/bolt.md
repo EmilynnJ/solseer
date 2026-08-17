@@ -1,0 +1,3 @@
+## 2026-08-17 - Memoization and Image Lazy Loading in Reader Cards
+**Learning:** `ReaderCard` instances in lists on the readers directory and homepage re-rendered whenever parent state changed (e.g. typing or toggling filters). Wrapping `ReaderCard` with `React.memo` prevents re-rendering unchanged card items, and adding `loading="lazy"` + `decoding="async"` to profile images defers fetching off-screen R2 images while avoiding main thread blocking during image decoding.
+**Action:** Always memoize item cards rendered inside filtered lists and add native image lazy loading attributes to image elements.
