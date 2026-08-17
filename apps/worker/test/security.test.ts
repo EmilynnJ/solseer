@@ -1,7 +1,11 @@
 /* eslint-disable @typescript-eslint/no-deprecated -- SELF remains the typed fetch binding in this test configuration. */
 import { SELF } from "cloudflare:test";
+import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
+import { errorResponse } from "../src/lib/errors";
+import { uploadRoutes } from "../src/routes/uploads";
 import { downloadLimitedJson } from "../src/routes/webhooks";
+import type { AppBindings } from "../src/types";
 
 describe("API security boundaries", () => {
   it("rejects untrusted domains and non-HTTPS protocols in chat download URLs (SSRF prevention)", async () => {
@@ -102,5 +106,49 @@ describe("API security boundaries", () => {
     const body = await response.json<{ error: { code: string; message: string } }>();
     expect(body.error.code).toBe("INVALID_UUID");
     expect(body.error.message).toContain("must be a valid UUID");
+  });
+
+  it("rejects invalid readerId query parameter for admin upload capability request", async () => {
+    const testApp = new Hono<AppBindings>();
+    testApp.post("/test-capability", async (c) => {
+      c.set("user", {
+        id: "11111111-1111-1111-1111-111111111111",
+        role: "admin",
+        status: "active",
+        email: "admin@example.com",
+        username: "admin",
+        fullName: "Admin",
+        neonAuthUserId: "auth-1",
+      });
+      const handlers = uploadRoutes.routes.filter(
+        (r) => r.path === "/reader-image/capability" && r.method === "POST",
+      );
+      const uploadHandler = handlers[handlers.length - 1]?.handler;
+      if (!uploadHandler) throw new Error("Handler not found");
+      return uploadHandler(c, async () => {});
+    });
+    testApp.onError((err, c) => errorResponse(err, c));
+
+    const res = await testApp.request(
+      "/test-capability?readerId=not-a-valid-uuid",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: "avatar.jpg",
+          contentType: "image/jpeg",
+          size: 2048,
+        }),
+      },
+      {
+        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/test",
+        UPLOAD_SIGNING_SECRET: "secret",
+      },
+    );
+
+    expect(res.status).toBe(400);
+    const body = await res.json<{ error: { code: string; message: string } }>();
+    expect(body.error.code).toBe("INVALID_UUID");
+    expect(body.error.message).toContain("readerId");
   });
 });

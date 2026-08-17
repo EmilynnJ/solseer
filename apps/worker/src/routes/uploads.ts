@@ -4,6 +4,7 @@ import {
   MAX_PROFILE_IMAGE_BYTES,
   profileImageMetadataSchema,
   readerProfiles,
+  uuidSchema,
 } from "@soulseer/shared";
 import type { AppBindings } from "../types";
 import { requireRole, requireUser } from "../lib/auth";
@@ -32,6 +33,13 @@ uploadRoutes.post(
       actor.role === "admin" ? context.req.query("readerId") : actor.id;
     if (!targetUserId)
       throw new AppError(400, "READER_REQUIRED", "A Reader id is required.");
+    if (!uuidSchema.safeParse(targetUserId).success) {
+      throw new AppError(
+        400,
+        "INVALID_UUID",
+        "The parameter 'readerId' must be a valid UUID.",
+      );
+    }
     const { db } = createDatabase(context.env.DATABASE_URL);
     const [reader] = await db
       .select({ id: readerProfiles.userId })
