@@ -259,83 +259,73 @@ readingRoutes.post(
   },
 );
 
-readingRoutes.post(
-  "/:id/participant-token",
-  requireUser,
-  validateUuidParams("id"),
-  async (context) => {
-    const user = context.get("user");
-    const { db } = createDatabase(context.env.DATABASE_URL);
-    const [reading] = await db
-      .select()
-      .from(readingSessions)
-      .where(
-        and(
-          eq(readingSessions.id, context.req.param("id")),
-          or(
-            eq(readingSessions.clientId, user.id),
-            eq(readingSessions.readerId, user.id),
-          ),
-          inArray(readingSessions.status, ["connecting", "active"]),
+readingRoutes.post("/:id/participant-token", requireUser, validateUuidParams("id"), async (context) => {
+  const user = context.get("user");
+  const { db } = createDatabase(context.env.DATABASE_URL);
+  const [reading] = await db
+    .select()
+    .from(readingSessions)
+    .where(
+      and(
+        eq(readingSessions.id, context.req.param("id")),
+        or(
+          eq(readingSessions.clientId, user.id),
+          eq(readingSessions.readerId, user.id),
         ),
-      )
-      .limit(1);
-    if (!reading?.cloudflareMeetingId) {
-      throw new AppError(
-        404,
-        "READING_NOT_READY",
-        "This reading room is not ready.",
-      );
-    }
-    const participantId =
-      user.id === reading.clientId
-        ? reading.clientParticipantId
-        : reading.readerParticipantId;
-    if (!participantId)
-      throw new AppError(
-        409,
-        "PARTICIPANT_NOT_READY",
-        "Your reading access is not ready.",
-      );
-    const token = await refreshParticipantToken(
-      context.env,
-      reading.cloudflareMeetingId,
-      participantId,
+        inArray(readingSessions.status, ["connecting", "active"]),
+      ),
+    )
+    .limit(1);
+  if (!reading?.cloudflareMeetingId) {
+    throw new AppError(
+      404,
+      "READING_NOT_READY",
+      "This reading room is not ready.",
     );
-    return context.json({ participantToken: token });
-  },
-);
+  }
+  const participantId =
+    user.id === reading.clientId
+      ? reading.clientParticipantId
+      : reading.readerParticipantId;
+  if (!participantId)
+    throw new AppError(
+      409,
+      "PARTICIPANT_NOT_READY",
+      "Your reading access is not ready.",
+    );
+  const token = await refreshParticipantToken(
+    context.env,
+    reading.cloudflareMeetingId,
+    participantId,
+  );
+  return context.json({ participantToken: token });
+});
 
-readingRoutes.post(
-  "/:id/end",
-  requireUser,
-  validateUuidParams("id"),
-  async (context) => {
-    const user = context.get("user");
-    const { db } = createDatabase(context.env.DATABASE_URL);
-    const [reading] = await db
-      .select({ id: readingSessions.id })
-      .from(readingSessions)
-      .where(
-        and(
-          eq(readingSessions.id, context.req.param("id")),
-          or(
-            eq(readingSessions.clientId, user.id),
-            eq(readingSessions.readerId, user.id),
-          ),
-          inArray(readingSessions.status, ["connecting", "active", "ending"]),
+readingRoutes.post("/:id/end", requireUser, validateUuidParams("id"), async (context) => {
+  const user = context.get("user");
+  const { db } = createDatabase(context.env.DATABASE_URL);
+  const [reading] = await db
+    .select({ id: readingSessions.id })
+    .from(readingSessions)
+    .where(
+      and(
+        eq(readingSessions.id, context.req.param("id")),
+        or(
+          eq(readingSessions.clientId, user.id),
+          eq(readingSessions.readerId, user.id),
         ),
-      )
-      .limit(1);
-    if (!reading)
-      throw new AppError(404, "READING_NOT_FOUND", "Active reading not found.");
-    const coordinator = context.env.READING_COORDINATOR.getByName(
-      reading.id,
-    ) as DurableObjectStub<ReadingCoordinator>;
-    await coordinator.requestEnd(user.id);
-    return context.json({ status: "ending" }, 202);
-  },
-);
+        inArray(readingSessions.status, ["connecting", "active", "ending"]),
+      ),
+    )
+    .limit(1);
+  if (!reading)
+    throw new AppError(404, "READING_NOT_FOUND", "Active reading not found.");
+  const coordinator = context.env.READING_COORDINATOR.getByName(
+    reading.id,
+  ) as DurableObjectStub<ReadingCoordinator>;
+  await coordinator.requestEnd(user.id);
+  return context.json({ status: "ending" }, 202);
+});
 
 readingRoutes.post(
   "/:id/rate",
@@ -413,50 +403,45 @@ readingRoutes.get(
   },
 );
 
-readingRoutes.get(
-  "/:id",
-  requireUser,
-  validateUuidParams("id"),
-  async (context) => {
-    const user = context.get("user");
-    const { db } = createDatabase(context.env.DATABASE_URL);
-    const [reading] = await db
-      .select()
-      .from(readingSessions)
-      .where(
-        and(
-          eq(readingSessions.id, context.req.param("id")),
-          user.role === "admin"
-            ? sql`true`
-            : or(
-                eq(readingSessions.clientId, user.id),
-                eq(readingSessions.readerId, user.id),
-              ),
-        ),
-      )
-      .limit(1);
-    if (!reading)
-      throw new AppError(404, "READING_NOT_FOUND", "Reading not found.");
-    const events = await db
-      .select({
-        eventType: readingEvents.eventType,
-        occurredAt: readingEvents.occurredAt,
-      })
-      .from(readingEvents)
-      .where(eq(readingEvents.readingId, reading.id))
-      .orderBy(desc(readingEvents.occurredAt));
-    const [balance] = await db
-      .select()
-      .from(wallets)
-      .where(eq(wallets.userId, user.id))
-      .limit(1);
-    return context.json({
-      reading,
-      events,
-      balance: balance?.availableBalance ?? 0,
-    });
-  },
-);
+readingRoutes.get("/:id", requireUser, validateUuidParams("id"), async (context) => {
+  const user = context.get("user");
+  const { db } = createDatabase(context.env.DATABASE_URL);
+  const [reading] = await db
+    .select()
+    .from(readingSessions)
+    .where(
+      and(
+        eq(readingSessions.id, context.req.param("id")),
+        user.role === "admin"
+          ? sql`true`
+          : or(
+              eq(readingSessions.clientId, user.id),
+              eq(readingSessions.readerId, user.id),
+            ),
+      ),
+    )
+    .limit(1);
+  if (!reading)
+    throw new AppError(404, "READING_NOT_FOUND", "Reading not found.");
+  const events = await db
+    .select({
+      eventType: readingEvents.eventType,
+      occurredAt: readingEvents.occurredAt,
+    })
+    .from(readingEvents)
+    .where(eq(readingEvents.readingId, reading.id))
+    .orderBy(desc(readingEvents.occurredAt));
+  const [balance] = await db
+    .select()
+    .from(wallets)
+    .where(eq(wallets.userId, user.id))
+    .limit(1);
+  return context.json({
+    reading,
+    events,
+    balance: balance?.availableBalance ?? 0,
+  });
+});
 
 function inArrayStatus<T extends string>(
   value: string,
