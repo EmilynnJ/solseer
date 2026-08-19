@@ -193,15 +193,18 @@ messageRoutes.post("/conversations", async (context) => {
   }
 });
 
-messageRoutes.get("/conversations/:id", validateUuidParams("id"), async (context) => {
-  const user = context.get("user");
-  const conversation = await findConversation(
-    context.env.DATABASE_URL,
-    context.req.param("id"),
-    user.id,
-  );
-  const { sql } = createDatabase(context.env.DATABASE_URL);
-  const result = await sql`
+messageRoutes.get(
+  "/conversations/:id",
+  validateUuidParams("id"),
+  async (context) => {
+    const user = context.get("user");
+    const conversation = await findConversation(
+      context.env.DATABASE_URL,
+      context.req.param("id"),
+      user.id,
+    );
+    const { sql } = createDatabase(context.env.DATABASE_URL);
+    const result = await sql`
     SELECT dm.id, dm.conversation_id, dm.sender_id, dm.kind,
            CASE WHEN dm.kind = 'reader_paid'
                      AND ${user.role} = 'client'
@@ -217,44 +220,48 @@ messageRoutes.get("/conversations/:id", validateUuidParams("id"), async (context
     ORDER BY dm.created_at ASC
     LIMIT 500
   `;
-  return context.json({
-    conversation: {
-      id: text(conversation.id),
-      clientId: text(conversation.client_id),
-      readerId: text(conversation.reader_id),
-    },
-    messages: (result.rows as DbRow[]).map(messageJson),
-  });
-});
+    return context.json({
+      conversation: {
+        id: text(conversation.id),
+        clientId: text(conversation.client_id),
+        readerId: text(conversation.reader_id),
+      },
+      messages: (result.rows as DbRow[]).map(messageJson),
+    });
+  },
+);
 
-messageRoutes.post("/conversations/:id/messages", validateUuidParams("id"), async (context) => {
-  const user = context.get("user");
-  const input = sendDirectMessageSchema.parse(await context.req.json());
-  const conversation = await findConversation(
-    context.env.DATABASE_URL,
-    context.req.param("id"),
-    user.id,
-  );
-  const { sql } = createDatabase(context.env.DATABASE_URL);
-  if (user.role === "client") {
-    if (input.paid) {
-      throw new AppError(
-        403,
-        "PAID_REPLY_READER_ONLY",
-        "Only Readers can price a reply.",
-      );
-    }
-    const result = await sql`
+messageRoutes.post(
+  "/conversations/:id/messages",
+  validateUuidParams("id"),
+  async (context) => {
+    const user = context.get("user");
+    const input = sendDirectMessageSchema.parse(await context.req.json());
+    const conversation = await findConversation(
+      context.env.DATABASE_URL,
+      context.req.param("id"),
+      user.id,
+    );
+    const { sql } = createDatabase(context.env.DATABASE_URL);
+    if (user.role === "client") {
+      if (input.paid) {
+        throw new AppError(
+          403,
+          "PAID_REPLY_READER_ONLY",
+          "Only Readers can price a reply.",
+        );
+      }
+      const result = await sql`
       SELECT * FROM public.send_client_message(
         ${user.id}::uuid, ${text(conversation.reader_id)}::uuid, ${input.body}
       )
     `;
-    return context.json(
-      { messageId: text((result.rows[0] as DbRow | undefined)?.message_id) },
-      201,
-    );
-  }
-  const result = await sql`
+      return context.json(
+        { messageId: text((result.rows[0] as DbRow | undefined)?.message_id) },
+        201,
+      );
+    }
+    const result = await sql`
     SELECT public.send_reader_message(
       ${user.id}::uuid,
       ${context.req.param("id")}::uuid,
@@ -263,86 +270,95 @@ messageRoutes.post("/conversations/:id/messages", validateUuidParams("id"), asyn
       ${input.paid ? input.priceCents : 0}
     ) AS message_id
   `;
-  return context.json(
-    { messageId: text((result.rows[0] as DbRow | undefined)?.message_id) },
-    201,
-  );
-});
-
-messageRoutes.post("/conversations/:id/read", validateUuidParams("id"), async (context) => {
-  const user = context.get("user");
-  await findConversation(
-    context.env.DATABASE_URL,
-    context.req.param("id"),
-    user.id,
-  );
-  const { sql } = createDatabase(context.env.DATABASE_URL);
-  if (user.role === "client") {
-    await sql`UPDATE message_conversations SET client_last_read_at = now(), updated_at = now() WHERE id = ${context.req.param("id")}::uuid`;
-  } else {
-    await sql`UPDATE message_conversations SET reader_last_read_at = now(), updated_at = now() WHERE id = ${context.req.param("id")}::uuid`;
-  }
-  return context.json({ ok: true });
-});
-
-messageRoutes.post("/messages/:id/unlock", validateUuidParams("id"), async (context) => {
-  const user = context.get("user");
-  if (user.role !== "client") {
-    throw new AppError(
-      403,
-      "ROLE_FORBIDDEN",
-      "Only Clients can unlock a paid reply.",
+    return context.json(
+      { messageId: text((result.rows[0] as DbRow | undefined)?.message_id) },
+      201,
     );
-  }
-  const idempotencyKey = context.req.header("Idempotency-Key")?.trim();
-  if (
-    !idempotencyKey ||
-    idempotencyKey.length < 8 ||
-    idempotencyKey.length > 200
-  ) {
-    throw new AppError(
-      400,
-      "IDEMPOTENCY_KEY_REQUIRED",
-      "A valid Idempotency-Key header is required.",
+  },
+);
+
+messageRoutes.post(
+  "/conversations/:id/read",
+  validateUuidParams("id"),
+  async (context) => {
+    const user = context.get("user");
+    await findConversation(
+      context.env.DATABASE_URL,
+      context.req.param("id"),
+      user.id,
     );
-  }
-  const { sql } = createDatabase(context.env.DATABASE_URL);
-  try {
-    const result = await sql`
+    const { sql } = createDatabase(context.env.DATABASE_URL);
+    if (user.role === "client") {
+      await sql`UPDATE message_conversations SET client_last_read_at = now(), updated_at = now() WHERE id = ${context.req.param("id")}::uuid`;
+    } else {
+      await sql`UPDATE message_conversations SET reader_last_read_at = now(), updated_at = now() WHERE id = ${context.req.param("id")}::uuid`;
+    }
+    return context.json({ ok: true });
+  },
+);
+
+messageRoutes.post(
+  "/messages/:id/unlock",
+  validateUuidParams("id"),
+  async (context) => {
+    const user = context.get("user");
+    if (user.role !== "client") {
+      throw new AppError(
+        403,
+        "ROLE_FORBIDDEN",
+        "Only Clients can unlock a paid reply.",
+      );
+    }
+    const idempotencyKey = context.req.header("Idempotency-Key")?.trim();
+    if (
+      !idempotencyKey ||
+      idempotencyKey.length < 8 ||
+      idempotencyKey.length > 200
+    ) {
+      throw new AppError(
+        400,
+        "IDEMPOTENCY_KEY_REQUIRED",
+        "A valid Idempotency-Key header is required.",
+      );
+    }
+    const { sql } = createDatabase(context.env.DATABASE_URL);
+    try {
+      const result = await sql`
       SELECT public.unlock_paid_message(
         ${context.req.param("id")}::uuid,
         ${user.id}::uuid,
         ${idempotencyKey}
       ) AS result
     `;
-    const value = (result.rows[0] as DbRow | undefined)?.result as
-      | Record<string, unknown>
-      | undefined;
-    if (value?.result === "insufficient_balance") {
-      throw new AppError(
-        402,
-        "INSUFFICIENT_BALANCE",
-        "Add funds before unlocking this reply.",
-        value,
-      );
+      const value = (result.rows[0] as DbRow | undefined)?.result as
+        | Record<string, unknown>
+        | undefined;
+      if (value?.result === "insufficient_balance") {
+        throw new AppError(
+          402,
+          "INSUFFICIENT_BALANCE",
+          "Add funds before unlocking this reply.",
+          value,
+        );
+      }
+      return context.json({ unlock: value });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message.includes("paid_message_not_found")) {
+        throw new AppError(
+          404,
+          "PAID_MESSAGE_NOT_FOUND",
+          "Paid reply not found.",
+        );
+      }
+      if (message.includes("idempotency_key_reused")) {
+        throw new AppError(
+          409,
+          "IDEMPOTENCY_KEY_REUSED",
+          "That request key was already used.",
+        );
+      }
+      throw error;
     }
-    return context.json({ unlock: value });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-    if (message.includes("paid_message_not_found")) {
-      throw new AppError(
-        404,
-        "PAID_MESSAGE_NOT_FOUND",
-        "Paid reply not found.",
-      );
-    }
-    if (message.includes("idempotency_key_reused")) {
-      throw new AppError(
-        409,
-        "IDEMPOTENCY_KEY_REUSED",
-        "That request key was already used.",
-      );
-    }
-    throw error;
-  }
-});
+  },
+);

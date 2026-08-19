@@ -175,48 +175,53 @@ adminRoutes.patch("/readers/:id", validateUuidParams("id"), async (context) => {
   return context.json({ reader: profile });
 });
 
-adminRoutes.post("/readers/:id/connect", validateUuidParams("id"), async (context) => {
-  const readerId = context.req.param("id");
-  const { db } = createDatabase(context.env.DATABASE_URL);
-  const [reader] = await db
-    .select({
-      email: users.email,
-      fullName: users.fullName,
-      stripeAccountId: readerProfiles.stripeAccountId,
-    })
-    .from(readerProfiles)
-    .innerJoin(users, eq(users.id, readerProfiles.userId))
-    .where(eq(readerProfiles.userId, readerId))
-    .limit(1);
-  if (!reader) throw new AppError(404, "READER_NOT_FOUND", "Reader not found.");
-  const stripe = createStripe(context.env);
-  const accountId =
-    reader.stripeAccountId ??
-    (
-      await stripe.accounts.create({
-        type: "express",
-        email: reader.email,
-        capabilities: { transfers: { requested: true } },
-        business_profile: {
-          product_description: "Spiritual reading services through SoulSeer",
-        },
-        metadata: { soulseerReaderId: readerId },
+adminRoutes.post(
+  "/readers/:id/connect",
+  validateUuidParams("id"),
+  async (context) => {
+    const readerId = context.req.param("id");
+    const { db } = createDatabase(context.env.DATABASE_URL);
+    const [reader] = await db
+      .select({
+        email: users.email,
+        fullName: users.fullName,
+        stripeAccountId: readerProfiles.stripeAccountId,
       })
-    ).id;
-  if (!reader.stripeAccountId) {
-    await db
-      .update(readerProfiles)
-      .set({ stripeAccountId: accountId, updatedAt: new Date() })
-      .where(eq(readerProfiles.userId, readerId));
-  }
-  const link = await stripe.accountLinks.create({
-    account: accountId,
-    refresh_url: `${context.env.FRONTEND_ORIGIN}/dashboard?connect=refresh`,
-    return_url: `${context.env.FRONTEND_ORIGIN}/dashboard?connect=complete`,
-    type: "account_onboarding",
-  });
-  return context.json({ url: link.url, expiresAt: link.expires_at });
-});
+      .from(readerProfiles)
+      .innerJoin(users, eq(users.id, readerProfiles.userId))
+      .where(eq(readerProfiles.userId, readerId))
+      .limit(1);
+    if (!reader)
+      throw new AppError(404, "READER_NOT_FOUND", "Reader not found.");
+    const stripe = createStripe(context.env);
+    const accountId =
+      reader.stripeAccountId ??
+      (
+        await stripe.accounts.create({
+          type: "express",
+          email: reader.email,
+          capabilities: { transfers: { requested: true } },
+          business_profile: {
+            product_description: "Spiritual reading services through SoulSeer",
+          },
+          metadata: { soulseerReaderId: readerId },
+        })
+      ).id;
+    if (!reader.stripeAccountId) {
+      await db
+        .update(readerProfiles)
+        .set({ stripeAccountId: accountId, updatedAt: new Date() })
+        .where(eq(readerProfiles.userId, readerId));
+    }
+    const link = await stripe.accountLinks.create({
+      account: accountId,
+      refresh_url: `${context.env.FRONTEND_ORIGIN}/dashboard?connect=refresh`,
+      return_url: `${context.env.FRONTEND_ORIGIN}/dashboard?connect=complete`,
+      type: "account_onboarding",
+    });
+    return context.json({ url: link.url, expiresAt: link.expires_at });
+  },
+);
 
 adminRoutes.get("/readings", async (context) => {
   const { db } = createDatabase(context.env.DATABASE_URL);
@@ -265,11 +270,14 @@ adminRoutes.post("/balance-adjust", async (context) => {
   return context.json({ result: result.rows[0]?.result });
 });
 
-adminRoutes.post("/refunds/:readingId", validateUuidParams("readingId"), async (context) => {
-  const input = adminRefundSchema.parse(await context.req.json());
-  const { sql: neonSql } = createDatabase(context.env.DATABASE_URL);
-  try {
-    const result = await neonSql`
+adminRoutes.post(
+  "/refunds/:readingId",
+  validateUuidParams("readingId"),
+  async (context) => {
+    const input = adminRefundSchema.parse(await context.req.json());
+    const { sql: neonSql } = createDatabase(context.env.DATABASE_URL);
+    try {
+      const result = await neonSql`
       SELECT public.refund_reading_to_wallet(
         ${context.req.param("readingId")}::uuid,
         ${context.get("user").id}::uuid,
@@ -277,95 +285,100 @@ adminRoutes.post("/refunds/:readingId", validateUuidParams("readingId"), async (
         ${input.idempotencyKey}
       ) AS result
     `;
-    return context.json({ refund: result.rows[0]?.result });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-    if (
-      message.includes("reading_not_refundable") ||
-      message.includes("reading_already_refunded")
-    ) {
-      throw new AppError(
-        409,
-        "READING_NOT_REFUNDABLE",
-        "This reading cannot be refunded.",
-      );
+      return context.json({ refund: result.rows[0]?.result });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (
+        message.includes("reading_not_refundable") ||
+        message.includes("reading_already_refunded")
+      ) {
+        throw new AppError(
+          409,
+          "READING_NOT_REFUNDABLE",
+          "This reading cannot be refunded.",
+        );
+      }
+      throw error;
     }
-    throw error;
-  }
-});
+  },
+);
 
-adminRoutes.post("/payouts/:readerId", validateUuidParams("readerId"), async (context) => {
-  const input = payoutRequestSchema.parse(await context.req.json());
-  const { sql: neonSql, db } = createDatabase(context.env.DATABASE_URL);
-  let reservation: {
-    payoutId: string;
-    amount: number;
-    stripeAccountId: string;
-    duplicate: boolean;
-  };
-  try {
-    const result = await neonSql`
+adminRoutes.post(
+  "/payouts/:readerId",
+  validateUuidParams("readerId"),
+  async (context) => {
+    const input = payoutRequestSchema.parse(await context.req.json());
+    const { sql: neonSql, db } = createDatabase(context.env.DATABASE_URL);
+    let reservation: {
+      payoutId: string;
+      amount: number;
+      stripeAccountId: string;
+      duplicate: boolean;
+    };
+    try {
+      const result = await neonSql`
       SELECT public.reserve_reader_payout(
         ${context.req.param("readerId")}::uuid,
         ${context.get("user").id}::uuid,
         ${input.idempotencyKey}
       ) AS result
     `;
-    reservation = result.rows[0]?.result as typeof reservation;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-    if (message.includes("connect_onboarding_required")) {
-      throw new AppError(
-        409,
-        "CONNECT_REQUIRED",
-        "Complete Stripe Connect onboarding before payout.",
-      );
+      reservation = result.rows[0]?.result as typeof reservation;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message.includes("connect_onboarding_required")) {
+        throw new AppError(
+          409,
+          "CONNECT_REQUIRED",
+          "Complete Stripe Connect onboarding before payout.",
+        );
+      }
+      if (message.includes("payout_below_threshold")) {
+        throw new AppError(
+          409,
+          "PAYOUT_BELOW_THRESHOLD",
+          "Reader earnings have not reached the $15 payout threshold.",
+        );
+      }
+      throw error;
     }
-    if (message.includes("payout_below_threshold")) {
-      throw new AppError(
-        409,
-        "PAYOUT_BELOW_THRESHOLD",
-        "Reader earnings have not reached the $15 payout threshold.",
-      );
+    if (reservation.duplicate) {
+      const [record] = await db
+        .select()
+        .from(payoutRecords)
+        .where(eq(payoutRecords.id, reservation.payoutId));
+      return context.json({ payout: record });
     }
-    throw error;
-  }
-  if (reservation.duplicate) {
-    const [record] = await db
-      .select()
-      .from(payoutRecords)
-      .where(eq(payoutRecords.id, reservation.payoutId));
-    return context.json({ payout: record });
-  }
-  const stripe = createStripe(context.env);
-  try {
-    const transfer = await stripe.transfers.create(
-      {
-        amount: reservation.amount,
-        currency: "usd",
-        destination: reservation.stripeAccountId,
-        metadata: { payoutRecordId: reservation.payoutId },
-      },
-      { idempotencyKey: `payout:${reservation.payoutId}` },
-    );
-    return context.json({
-      payout: {
-        id: reservation.payoutId,
-        status: "processing",
-        amount: reservation.amount,
-      },
-      transferId: transfer.id,
-    });
-  } catch (error) {
-    await neonSql`
+    const stripe = createStripe(context.env);
+    try {
+      const transfer = await stripe.transfers.create(
+        {
+          amount: reservation.amount,
+          currency: "usd",
+          destination: reservation.stripeAccountId,
+          metadata: { payoutRecordId: reservation.payoutId },
+        },
+        { idempotencyKey: `payout:${reservation.payoutId}` },
+      );
+      return context.json({
+        payout: {
+          id: reservation.payoutId,
+          status: "processing",
+          amount: reservation.amount,
+        },
+        transferId: transfer.id,
+      });
+    } catch (error) {
+      await neonSql`
       SELECT public.fail_reader_payout(
         ${reservation.payoutId}::uuid,
         ${error instanceof Error ? error.message.slice(0, 500) : "Stripe transfer failed"}
       )
     `;
-    throw error;
-  }
-});
+      throw error;
+    }
+  },
+);
 
 adminRoutes.get("/forum/flagged", async (context) => {
   const { db } = createDatabase(context.env.DATABASE_URL);
@@ -377,41 +390,52 @@ adminRoutes.get("/forum/flagged", async (context) => {
   return context.json({ flags });
 });
 
-adminRoutes.patch("/forum/flags/:id", validateUuidParams("id"), async (context) => {
-  const input = z
-    .object({ status: z.enum(["dismissed", "actioned"]) })
-    .parse(await context.req.json());
-  const { db } = createDatabase(context.env.DATABASE_URL);
-  const [flag] = await db
-    .update(forumFlags)
-    .set({
-      status: input.status,
-      reviewedById: context.get("user").id,
-      reviewedAt: new Date(),
-    })
-    .where(eq(forumFlags.id, context.req.param("id")))
-    .returning();
-  if (!flag) throw new AppError(404, "FLAG_NOT_FOUND", "Flag not found.");
-  return context.json({ flag });
-});
+adminRoutes.patch(
+  "/forum/flags/:id",
+  validateUuidParams("id"),
+  async (context) => {
+    const input = z
+      .object({ status: z.enum(["dismissed", "actioned"]) })
+      .parse(await context.req.json());
+    const { db } = createDatabase(context.env.DATABASE_URL);
+    const [flag] = await db
+      .update(forumFlags)
+      .set({
+        status: input.status,
+        reviewedById: context.get("user").id,
+        reviewedAt: new Date(),
+      })
+      .where(eq(forumFlags.id, context.req.param("id")))
+      .returning();
+    if (!flag) throw new AppError(404, "FLAG_NOT_FOUND", "Flag not found.");
+    return context.json({ flag });
+  },
+);
 
 adminRoutes.get("/financial-summary", async (context) => {
   const { db } = createDatabase(context.env.DATABASE_URL);
-  const [pending] = await db
-    .select({
-      total: sql<number>`coalesce(sum(${pendingPayouts.availableAmount}), 0)::int`,
-    })
-    .from(pendingPayouts);
-  const payouts = await db
-    .select()
-    .from(payoutRecords)
-    .orderBy(desc(payoutRecords.createdAt))
-    .limit(200);
-  const refunds = await db
-    .select()
-    .from(refundRecords)
-    .orderBy(desc(refundRecords.createdAt))
-    .limit(200);
+
+  // ⚡ Bolt: Fetch financial summary data concurrently to improve endpoint response time
+  const [pendingResult, payouts, refunds] = await Promise.all([
+    db
+      .select({
+        total: sql<number>`coalesce(sum(${pendingPayouts.availableAmount}), 0)::int`,
+      })
+      .from(pendingPayouts),
+    db
+      .select()
+      .from(payoutRecords)
+      .orderBy(desc(payoutRecords.createdAt))
+      .limit(200),
+    db
+      .select()
+      .from(refundRecords)
+      .orderBy(desc(refundRecords.createdAt))
+      .limit(200),
+  ]);
+
+  const [pending] = pendingResult;
+
   return context.json({
     pendingPayoutTotal: pending?.total ?? 0,
     payouts,

@@ -1,10 +1,6 @@
 import { eq } from "drizzle-orm";
 import type { MiddlewareHandler } from "hono";
-import {
-  createRemoteJWKSet,
-  jwtVerify,
-  type JWTVerifyGetKey,
-} from "jose";
+import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
 import { users, type AuthenticatedUser } from "@soulseer/shared";
 import type { AppBindings, AuthIdentity } from "../types";
 import { createDatabase } from "./db";

@@ -110,68 +110,83 @@ forumRoutes.get("/posts/:id", validateUuidParams("id"), async (context) => {
   return context.json({ post, comments });
 });
 
-forumRoutes.post("/posts/:id/comments", requireUser, validateUuidParams("id"), async (context) => {
-  const input = createForumCommentSchema.parse(await context.req.json());
-  const postId = context.req.param("id");
-  const { db } = createDatabase(context.env.DATABASE_URL);
-  const [post] = await db
-    .select()
-    .from(forumPosts)
-    .where(eq(forumPosts.id, postId))
-    .limit(1);
-  if (!post || post.status !== "visible")
-    throw new AppError(404, "POST_NOT_FOUND", "Forum post not found.");
-  if (post.isLocked)
-    throw new AppError(409, "POST_LOCKED", "This discussion is locked.");
-  if (input.parentId) {
-    const [parent] = await db
-      .select({
-        parentId: forumComments.parentId,
-        postId: forumComments.postId,
-      })
-      .from(forumComments)
-      .where(eq(forumComments.id, input.parentId))
+forumRoutes.post(
+  "/posts/:id/comments",
+  requireUser,
+  validateUuidParams("id"),
+  async (context) => {
+    const input = createForumCommentSchema.parse(await context.req.json());
+    const postId = context.req.param("id");
+    const { db } = createDatabase(context.env.DATABASE_URL);
+    const [post] = await db
+      .select()
+      .from(forumPosts)
+      .where(eq(forumPosts.id, postId))
       .limit(1);
-    if (!parent || parent.postId !== postId || parent.parentId) {
-      throw new AppError(
-        400,
-        "INVALID_COMMENT_PARENT",
-        "Replies may be nested one level only.",
-      );
+    if (!post || post.status !== "visible")
+      throw new AppError(404, "POST_NOT_FOUND", "Forum post not found.");
+    if (post.isLocked)
+      throw new AppError(409, "POST_LOCKED", "This discussion is locked.");
+    if (input.parentId) {
+      const [parent] = await db
+        .select({
+          parentId: forumComments.parentId,
+          postId: forumComments.postId,
+        })
+        .from(forumComments)
+        .where(eq(forumComments.id, input.parentId))
+        .limit(1);
+      if (!parent || parent.postId !== postId || parent.parentId) {
+        throw new AppError(
+          400,
+          "INVALID_COMMENT_PARENT",
+          "Replies may be nested one level only.",
+        );
+      }
     }
-  }
-  const [comment] = await db
-    .insert(forumComments)
-    .values({ postId, authorId: context.get("user").id, ...input })
-    .returning();
-  return context.json({ comment }, 201);
-});
+    const [comment] = await db
+      .insert(forumComments)
+      .values({ postId, authorId: context.get("user").id, ...input })
+      .returning();
+    return context.json({ comment }, 201);
+  },
+);
 
-forumRoutes.post("/posts/:id/flag", requireUser, validateUuidParams("id"), async (context) => {
-  const input = flagContentSchema.parse({
-    ...(await context.req.json()),
-    postId: context.req.param("id"),
-  });
-  const { db } = createDatabase(context.env.DATABASE_URL);
-  const [flag] = await db
-    .insert(forumFlags)
-    .values({ reporterId: context.get("user").id, ...input })
-    .returning();
-  return context.json({ flag }, 201);
-});
+forumRoutes.post(
+  "/posts/:id/flag",
+  requireUser,
+  validateUuidParams("id"),
+  async (context) => {
+    const input = flagContentSchema.parse({
+      ...(await context.req.json()),
+      postId: context.req.param("id"),
+    });
+    const { db } = createDatabase(context.env.DATABASE_URL);
+    const [flag] = await db
+      .insert(forumFlags)
+      .values({ reporterId: context.get("user").id, ...input })
+      .returning();
+    return context.json({ flag }, 201);
+  },
+);
 
-forumRoutes.post("/comments/:id/flag", requireUser, validateUuidParams("id"), async (context) => {
-  const input = flagContentSchema.parse({
-    ...(await context.req.json()),
-    commentId: context.req.param("id"),
-  });
-  const { db } = createDatabase(context.env.DATABASE_URL);
-  const [flag] = await db
-    .insert(forumFlags)
-    .values({ reporterId: context.get("user").id, ...input })
-    .returning();
-  return context.json({ flag }, 201);
-});
+forumRoutes.post(
+  "/comments/:id/flag",
+  requireUser,
+  validateUuidParams("id"),
+  async (context) => {
+    const input = flagContentSchema.parse({
+      ...(await context.req.json()),
+      commentId: context.req.param("id"),
+    });
+    const { db } = createDatabase(context.env.DATABASE_URL);
+    const [flag] = await db
+      .insert(forumFlags)
+      .values({ reporterId: context.get("user").id, ...input })
+      .returning();
+    return context.json({ flag }, 201);
+  },
+);
 
 forumRoutes.delete(
   "/posts/:id",

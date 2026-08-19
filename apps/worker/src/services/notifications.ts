@@ -27,11 +27,14 @@ export async function notifyReaderOfIncomingReading(
     .limit(1);
   if (!settings?.enabled || !settings.phoneNumber) return;
   if (!smsIsConfigured(env)) {
-    logger.warn("Reader SMS notification skipped because SMS is not configured", {
-      readingId: reading.id,
-      userId: reading.readerId,
-      operation: "reader_sms",
-    });
+    logger.warn(
+      "Reader SMS notification skipped because SMS is not configured",
+      {
+        readingId: reading.id,
+        userId: reading.readerId,
+        operation: "reader_sms",
+      },
+    );
     return;
   }
 
