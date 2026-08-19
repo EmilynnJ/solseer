@@ -1,3 +1,0 @@
-## 2026-08-19 - Concurrent Database Queries in Worker Routes
-**Learning:** Cloudflare Workers running Drizzle on Neon Postgres can easily suffer from N+1 style query bottlenecks if independent queries are written sequentially using multiple `await` statements. This significantly inflates response time on summary routes.
-**Action:** When inspecting backend worker routes for performance, check if multiple `await db.select()...` statements in a single handler are independent. If so, always wrap them in a `Promise.all` to fetch the data concurrently.
