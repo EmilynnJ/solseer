@@ -151,4 +151,16 @@ describe("API security boundaries", () => {
     expect(body.error.code).toBe("INVALID_UUID");
     expect(body.error.message).toContain("readerId");
   });
+
+  it("rejects excessive page query parameters on forum endpoints to prevent DoS", async () => {
+    const response = await SELF.fetch(
+      "https://api.example.test/api/forum/posts?page=99999",
+      {
+        headers: { Origin: "http://127.0.0.1:5173" },
+      },
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json<{ error: { code: string } }>();
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+  });
 });
