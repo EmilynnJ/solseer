@@ -176,7 +176,7 @@ export const realtimeKitEventSchema = z.object({
   participant: z
     .object({
       peerId: z.string().min(1),
-      customParticipantId: uuidSchema,
+      customParticipantId: z.string().min(1).optional(),
       joinedAt: z.string().datetime().optional(),
       leftAt: z.string().datetime().optional(),
     })

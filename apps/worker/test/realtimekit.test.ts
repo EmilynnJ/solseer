@@ -195,4 +195,23 @@ describe("RealtimeKit Preflight and Initial Connection ID relaxation", () => {
 
     expect(token).toBe("new-mock-token-456");
   });
+
+  it("parses webhook events cleanly when customParticipantId is omitted or a non-UUID string", async () => {
+    const { realtimeKitEventSchema } = await import("@soulseer/shared");
+
+    const payloadNoCustomId = {
+      event: "meeting.participantJoined",
+      meeting: { id: "meeting-1" },
+      participant: { peerId: "peer-1" },
+    };
+    expect(() => realtimeKitEventSchema.parse(payloadNoCustomId)).not.toThrow();
+
+    const payloadStringCustomId = {
+      event: "meeting.participantLeft",
+      meeting: { id: "meeting-1" },
+      participant: { peerId: "peer-1", customParticipantId: "non-uuid-user-id" },
+    };
+    const parsed = realtimeKitEventSchema.parse(payloadStringCustomId);
+    expect(parsed.participant?.customParticipantId).toBe("non-uuid-user-id");
+  });
 });
