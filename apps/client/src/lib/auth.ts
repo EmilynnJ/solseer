@@ -13,12 +13,6 @@ export const authClient = createAuthClient(
 );
 
 export async function getAccessToken(): Promise<string | null> {
-  // neon-js re-exports the runtime method but its React adapter return type
-  // currently omits it. Keep token retrieval inside the SDK so session caching,
-  // refreshes, and credential handling all follow Neon's supported path.
-  return (
-    authClient as typeof authClient & {
-      getJWTToken(): Promise<string | null>;
-    }
-  ).getJWTToken();
+  const session = await authClient.getSession();
+  return session.data?.session.token ?? null;
 }
