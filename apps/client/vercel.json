@@ -3,6 +3,7 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "alias": ["soul-seer.net"],
   "rewrites": [
     {
       "source": "/(.*)",
