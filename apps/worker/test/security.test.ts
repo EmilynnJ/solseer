@@ -21,6 +21,13 @@ describe("API security boundaries", () => {
       downloadLimitedJson("https://attacker.cloudflare.com.evil.com/chat.json", 1000),
     ).rejects.toThrow("Chat download URL domain is not allowed.");
   });
+
+  it("rejects HTTP redirects when fetching chat download URLs (SSRF redirect prevention)", async () => {
+    // Attempting to fetch a URL on an allowed domain that responds with a redirect should fail due to redirect: "error"
+    await expect(
+      downloadLimitedJson("https://cloudflare.com/redirect-target", 1000),
+    ).rejects.toThrow();
+  });
   it("rejects an unapproved browser origin", async () => {
     const response = await SELF.fetch("https://api.example.test/api/health", {
       headers: { Origin: "https://attacker.example" },
