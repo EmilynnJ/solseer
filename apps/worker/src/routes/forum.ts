@@ -148,8 +148,9 @@ forumRoutes.post("/posts/:id/comments", requireUser, validateUuidParams("id"), a
 });
 
 forumRoutes.post("/posts/:id/flag", requireUser, validateUuidParams("id"), async (context) => {
+  const body = (await context.req.json()) as { reason?: string };
   const input = flagContentSchema.parse({
-    ...(await context.req.json()),
+    reason: body.reason,
     postId: context.req.param("id"),
   });
   const { db } = createDatabase(context.env.DATABASE_URL);
@@ -161,8 +162,9 @@ forumRoutes.post("/posts/:id/flag", requireUser, validateUuidParams("id"), async
 });
 
 forumRoutes.post("/comments/:id/flag", requireUser, validateUuidParams("id"), async (context) => {
+  const body = (await context.req.json()) as { reason?: string };
   const input = flagContentSchema.parse({
-    ...(await context.req.json()),
+    reason: body.reason,
     commentId: context.req.param("id"),
   });
   const { db } = createDatabase(context.env.DATABASE_URL);
