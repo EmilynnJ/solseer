@@ -13,6 +13,6 @@ export const authClient = createAuthClient(
 );
 
 export async function getAccessToken(): Promise<string | null> {
-  const session = await authClient.getSession();
-  return session.data?.session.token ?? null;
+  const token = await authClient.token();
+  return token.data?.token ?? null;
 }
