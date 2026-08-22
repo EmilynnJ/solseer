@@ -1,18 +1,29 @@
+import { memo } from "react";
 import { Link } from "react-router-dom";
 import { MessageCircle, Mic, Video } from "lucide-react";
 import type { Reader } from "../types";
 import { API_ORIGIN, money } from "../lib/api";
 import { Stars } from "./ui";
 
-export function ReaderCard({ reader }: { reader: Reader }) {
+// ⚡ Bolt Optimization:
+// - Wrapped in React.memo to prevent re-renders on ReadersPage filter changes
+//   (Impact: Avoids rebuilding unchanged cards when list changes)
+export const ReaderCard = memo(function ReaderCard({
+  reader,
+}: {
+  reader: Reader;
+}) {
   return (
     <article className="reader-card reveal">
       <Link to={`/readers/${reader.id}`} className="reader-portrait-wrap">
         {reader.profileImageKey ? (
+          // ⚡ Bolt Optimization: Added lazy loading to profile images
+          // (Impact: Saves bandwidth and improves LCP by only loading visible portraits)
           <img
             className="reader-portrait"
             src={`${API_ORIGIN}/api/readers/${reader.id}/image`}
             alt={`${reader.fullName}, SoulSeer Reader`}
+            loading="lazy"
           />
         ) : (
           <div className="reader-portrait fallback" aria-hidden="true">
@@ -50,4 +61,4 @@ export function ReaderCard({ reader }: { reader: Reader }) {
       </div>
     </article>
   );
-}
+});
