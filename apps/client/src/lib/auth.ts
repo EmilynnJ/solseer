@@ -13,6 +13,11 @@ export const authClient = createAuthClient(
 );
 
 export async function getAccessToken(): Promise<string | null> {
-  const session = await authClient.getSession();
-  return session.data?.session.token ?? null;
+  // createAuthClient exposes this top-level token API at runtime, but the React
+  // adapter's conditional return type currently omits it.
+  return (
+    authClient as typeof authClient & {
+      getJWTToken(): Promise<string | null>;
+    }
+  ).getJWTToken();
 }
