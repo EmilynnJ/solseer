@@ -41,6 +41,7 @@ enabled = true
 head_sampling_rate = 0.05
 
 [env.production]
+name = "soulseer-api"
 workers_dev = true
 routes = [
   { pattern = "api.soul-seer.net", custom_domain = true },
