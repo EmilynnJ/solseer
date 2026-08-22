@@ -20,21 +20,36 @@ import { validateUuidParams } from "../lib/http";
 
 export const readerRoutes = new Hono<AppBindings>();
 
-function readerSelect() {
+// Optimization: Pre-aggregate reviews per reader in a subquery to avoid M*N row expansion
+// during joins with reader profiles and users, eliminating expensive full table GROUP BYs.
+function getReaderQuery(db: ReturnType<typeof createDatabase>["db"]) {
+  const reviewStats = db
+    .select({
+      readerId: reviews.readerId,
+      rating: sql<number>`coalesce(avg(${reviews.rating}), 0)::float`.as("rating"),
+      reviewCount: sql<number>`count(${reviews.id})::int`.as("review_count"),
+    })
+    .from(reviews)
+    .groupBy(reviews.readerId)
+    .as("review_stats");
+
   return {
-    id: users.id,
-    username: users.username,
-    fullName: users.fullName,
-    bio: readerProfiles.bio,
-    specialties: readerProfiles.specialties,
-    pricingChat: readerProfiles.pricingChat,
-    pricingVoice: readerProfiles.pricingVoice,
-    pricingVideo: readerProfiles.pricingVideo,
-    isOnline: readerProfiles.isOnline,
-    lastHeartbeatAt: readerProfiles.lastHeartbeatAt,
-    profileImageKey: readerProfiles.profileImageKey,
-    rating: sql<number>`coalesce(avg(${reviews.rating}), 0)::float`,
-    reviewCount: sql<number>`count(${reviews.id})::int`,
+    reviewStats,
+    selection: {
+      id: users.id,
+      username: users.username,
+      fullName: users.fullName,
+      bio: readerProfiles.bio,
+      specialties: readerProfiles.specialties,
+      pricingChat: readerProfiles.pricingChat,
+      pricingVoice: readerProfiles.pricingVoice,
+      pricingVideo: readerProfiles.pricingVideo,
+      isOnline: readerProfiles.isOnline,
+      lastHeartbeatAt: readerProfiles.lastHeartbeatAt,
+      profileImageKey: readerProfiles.profileImageKey,
+      rating: sql<number>`coalesce(${reviewStats.rating}, 0)::float`,
+      reviewCount: sql<number>`coalesce(${reviewStats.reviewCount}, 0)::int`,
+    },
   };
 }
 
@@ -53,13 +68,14 @@ async function listReaders(env: Env, onlineOnly: boolean) {
         eq(users.status, "active"),
       );
 
+  const { reviewStats, selection } = getReaderQuery(db);
+
   return db
-    .select(readerSelect())
+    .select(selection)
     .from(readerProfiles)
     .innerJoin(users, eq(users.id, readerProfiles.userId))
-    .leftJoin(reviews, eq(reviews.readerId, readerProfiles.userId))
+    .leftJoin(reviewStats, eq(reviewStats.readerId, readerProfiles.userId))
     .where(condition)
-    .groupBy(users.id, readerProfiles.userId)
     .orderBy(
       desc(
         sql`${readerProfiles.isOnline} AND ${readerProfiles.lastHeartbeatAt} > ${freshness}`,
@@ -78,11 +94,13 @@ readerRoutes.get("/online", async (context) =>
 readerRoutes.get("/:id", validateUuidParams("id"), async (context) => {
   const { db } = createDatabase(context.env.DATABASE_URL);
   const id = context.req.param("id");
+  const { reviewStats, selection } = getReaderQuery(db);
+
   const [reader] = await db
-    .select(readerSelect())
+    .select(selection)
     .from(readerProfiles)
     .innerJoin(users, eq(users.id, readerProfiles.userId))
-    .leftJoin(reviews, eq(reviews.readerId, readerProfiles.userId))
+    .leftJoin(reviewStats, eq(reviewStats.readerId, readerProfiles.userId))
     .where(
       and(
         eq(readerProfiles.userId, id),
@@ -90,7 +108,6 @@ readerRoutes.get("/:id", validateUuidParams("id"), async (context) => {
         eq(users.status, "active"),
       ),
     )
-    .groupBy(users.id, readerProfiles.userId)
     .limit(1);
   if (!reader) throw new AppError(404, "READER_NOT_FOUND", "Reader not found.");
   const recentReviews = await db
