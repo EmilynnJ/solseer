@@ -13,18 +13,6 @@ export const authClient = createAuthClient(
 );
 
 export async function getAccessToken(): Promise<string | null> {
-  const response = await fetch(`${authUrl}/token`, {
-    credentials: "include",
-    headers: { Accept: "application/json" },
-  });
-
-  if (response.status === 401 || response.status === 403) return null;
-  if (!response.ok) {
-    throw new Error(`Neon Auth token request failed (${response.status}).`);
-  }
-
-  const payload = (await response.json()) as { token?: unknown } | null;
-  return typeof payload?.token === "string" && payload.token.length > 0
-    ? payload.token
-    : null;
+  const session = await authClient.getSession();
+  return session.data?.session.token ?? null;
 }
