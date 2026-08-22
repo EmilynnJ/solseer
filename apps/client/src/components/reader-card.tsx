@@ -1,10 +1,16 @@
+import { memo } from "react";
 import { Link } from "react-router-dom";
 import { MessageCircle, Mic, Video } from "lucide-react";
 import type { Reader } from "../types";
 import { API_ORIGIN, money } from "../lib/api";
 import { Stars } from "./ui";
 
-export function ReaderCard({ reader }: { reader: Reader }) {
+/**
+ * ReaderCard component displaying reader information.
+ * Memoized with React.memo to prevent unnecessary re-renders when parent lists
+ * or filter states (such as maxPrice, specialty, online filter) update in ReadersPage or HomePage.
+ */
+export const ReaderCard = memo(function ReaderCard({ reader }: { reader: Reader }) {
   return (
     <article className="reader-card reveal">
       <Link to={`/readers/${reader.id}`} className="reader-portrait-wrap">
@@ -50,4 +56,4 @@ export function ReaderCard({ reader }: { reader: Reader }) {
       </div>
     </article>
   );
-}
+});
