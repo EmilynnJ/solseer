@@ -3,11 +3,56 @@ import { SELF } from "cloudflare:test";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { errorResponse } from "../src/lib/errors";
+import { forumRoutes } from "../src/routes/forum";
 import { uploadRoutes } from "../src/routes/uploads";
 import { downloadLimitedJson } from "../src/routes/webhooks";
 import type { AppBindings } from "../src/types";
 
 describe("API security boundaries", () => {
+  it("forces target IDs from URL parameters in forum flagging requests", async () => {
+    const testApp = new Hono<AppBindings>();
+    testApp.post("/posts/:id/flag", async (c) => {
+      c.set("user", {
+        id: "11111111-1111-1111-1111-111111111111",
+        role: "client",
+        status: "active",
+        email: "user@example.com",
+        username: "user",
+        fullName: "User",
+        neonAuthUserId: "auth-1",
+      });
+      const handlers = forumRoutes.routes.filter(
+        (r) => r.path === "/posts/:id/flag" && r.method === "POST",
+      );
+      const flagHandler = handlers[handlers.length - 1]?.handler;
+      if (!flagHandler) throw new Error("Handler not found");
+      return flagHandler(c, async () => {});
+    });
+    testApp.onError((err, c) => errorResponse(err, c));
+
+    // Client passes a path param post ID and attempts to override commentId in the JSON body
+    const pathPostId = "22222222-2222-4222-8222-222222222222";
+    const bodyCommentId = "33333333-3333-4333-8333-333333333333";
+
+    const res = await testApp.request(
+      `/posts/${pathPostId}/flag`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reason: "Inappropriate content in forum post",
+          commentId: bodyCommentId,
+        }),
+      },
+      {
+        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/test",
+      },
+    );
+
+    // If body override occurred, refine check (postId + commentId == 1) would throw error or fail.
+    // With strict extraction, status should not be a schema validation mismatch error.
+    expect(res.status).not.toBe(400);
+  });
   it("rejects untrusted domains and non-HTTPS protocols in chat download URLs (SSRF prevention)", async () => {
     await expect(
       downloadLimitedJson("http://169.254.169.254/latest/meta-data", 1000),
