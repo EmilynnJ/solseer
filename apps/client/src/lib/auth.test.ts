@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const authMocks = vi.hoisted(() => ({ token: vi.fn() }));
+const authMocks = vi.hoisted(() => ({ getSession: vi.fn() }));
 
 vi.mock("@neondatabase/neon-js/auth", () => ({
-  createAuthClient: () => ({ token: authMocks.token }),
+  createAuthClient: () => ({
+    getSession: authMocks.getSession,
+    useSession: vi.fn(),
+  }),
 }));
 
 vi.mock("@neondatabase/neon-js/auth/react/adapters", () => ({
@@ -14,12 +17,12 @@ import { getAccessToken } from "./auth";
 
 describe("Neon Auth access tokens", () => {
   beforeEach(() => {
-    authMocks.token.mockReset();
+    authMocks.getSession.mockReset();
   });
 
-  it("retrieves the signed JWT from Neon's token endpoint", async () => {
-    authMocks.token.mockResolvedValue({
-      data: { token: "signed.jwt.value" },
+  it("retrieves the signed JWT from Neon's authenticated session", async () => {
+    authMocks.getSession.mockResolvedValue({
+      data: { session: { token: "signed.jwt.value" } },
       error: null,
     });
 
@@ -27,13 +30,13 @@ describe("Neon Auth access tokens", () => {
   });
 
   it("returns null when Neon Auth has no authenticated session", async () => {
-    authMocks.token.mockResolvedValue({ data: null, error: null });
+    authMocks.getSession.mockResolvedValue({ data: null, error: null });
 
     await expect(getAccessToken()).resolves.toBeNull();
   });
 
   it("surfaces unexpected Neon Auth SDK failures", async () => {
-    authMocks.token.mockRejectedValue(new Error("Auth unavailable."));
+    authMocks.getSession.mockRejectedValue(new Error("Auth unavailable."));
 
     await expect(getAccessToken()).rejects.toThrow("Auth unavailable.");
   });
