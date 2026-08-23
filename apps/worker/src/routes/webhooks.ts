@@ -289,7 +289,10 @@ export async function downloadLimitedJson(
     throw new Error("Chat download URL domain is not allowed.");
   }
 
-  const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+  const response = await fetch(url, {
+    redirect: "error",
+    signal: AbortSignal.timeout(10_000),
+  });
   if (!response.ok || !response.body)
     throw new Error("Chat replay download failed.");
   const statedLength = Number(response.headers.get("Content-Length") ?? 0);
