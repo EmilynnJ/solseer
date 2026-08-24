@@ -78,7 +78,7 @@ async function resolveAccountSecrets(env: Env): Promise<Env> {
   return {
     ...env,
     ...Object.fromEntries(resolvedEntries),
-  } as Env;
+  };
 }
 
 const app = new Hono<AppBindings>();
