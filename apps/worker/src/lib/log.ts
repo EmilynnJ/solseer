@@ -35,15 +35,15 @@ export const logger = {
     message: string,
     context?: LogContext,
     details?: Record<string, unknown>,
-  ) => { write("info", message, context, details); },
+  ) => write("info", message, context, details),
   warn: (
     message: string,
     context?: LogContext,
     details?: Record<string, unknown>,
-  ) => { write("warn", message, context, details); },
+  ) => write("warn", message, context, details),
   error: (
     message: string,
     context?: LogContext,
     details?: Record<string, unknown>,
-  ) => { write("error", message, context, details); },
+  ) => write("error", message, context, details),
 };
