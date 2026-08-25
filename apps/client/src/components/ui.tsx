@@ -1,10 +1,4 @@
-import {
-  useEffect,
-  useRef,
-  type ButtonHTMLAttributes,
-  type PropsWithChildren,
-  type ReactNode,
-} from "react";
+import type { ButtonHTMLAttributes, PropsWithChildren, ReactNode } from "react";
 import { LoaderCircle, Star } from "lucide-react";
 
 export function Button({
@@ -79,27 +73,9 @@ export function Modal({
   children,
   onClose,
 }: PropsWithChildren<{ title: string; onClose: () => void }>) {
-  const modalRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
-  useEffect(() => {
-    modalRef.current?.focus();
-  }, []);
-
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section
-        ref={modalRef}
-        tabIndex={-1}
         className="modal"
         role="dialog"
         aria-modal="true"
