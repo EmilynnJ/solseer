@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-deprecated -- SELF remains the typed fetch binding in this test configuration. */
 import { SELF } from "cloudflare:test";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { errorResponse } from "../src/lib/errors";
 import { uploadRoutes } from "../src/routes/uploads";
 import { downloadLimitedJson } from "../src/routes/webhooks";
@@ -20,6 +20,19 @@ describe("API security boundaries", () => {
     await expect(
       downloadLimitedJson("https://attacker.cloudflare.com.evil.com/chat.json", 1000),
     ).rejects.toThrow("Chat download URL domain is not allowed.");
+  });
+
+  it("prevents SSRF redirect bypasses when chat download URL encounters HTTP redirects", async () => {
+    // Verifies that fetch is executed with redirect: "error" setting
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await expect(
+      downloadLimitedJson("https://realtimekit.com/redirect-target.json", 1000),
+    ).rejects.toThrow();
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://realtimekit.com/redirect-target.json",
+      expect.objectContaining({ redirect: "error" }),
+    );
+    fetchSpy.mockRestore();
   });
   it("rejects an unapproved browser origin", async () => {
     const response = await SELF.fetch("https://api.example.test/api/health", {
