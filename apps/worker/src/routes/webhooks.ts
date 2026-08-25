@@ -301,6 +301,7 @@ export async function downloadLimitedJson(
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let received = 0;
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   while (true) {
     const { value, done } = await reader.read();
     if (done) break;
