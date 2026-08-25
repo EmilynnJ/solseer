@@ -1,18 +1,10 @@
-import { memo } from "react";
 import { Link } from "react-router-dom";
 import { MessageCircle, Mic, Video } from "lucide-react";
 import type { Reader } from "../types";
 import { API_ORIGIN, money } from "../lib/api";
 import { Stars } from "./ui";
 
-// Memoize ReaderCard to skip unnecessary re-renders during reader list filtering.
-// Use lazy loading and async decoding on profile images to defer off-screen fetches
-// and prevent main-thread rendering jank.
-export const ReaderCard = memo(function ReaderCard({
-  reader,
-}: {
-  reader: Reader;
-}) {
+export function ReaderCard({ reader }: { reader: Reader }) {
   return (
     <article className="reader-card reveal">
       <Link to={`/readers/${reader.id}`} className="reader-portrait-wrap">
@@ -21,8 +13,6 @@ export const ReaderCard = memo(function ReaderCard({
             className="reader-portrait"
             src={`${API_ORIGIN}/api/readers/${reader.id}/image`}
             alt={`${reader.fullName}, SoulSeer Reader`}
-            loading="lazy"
-            decoding="async"
           />
         ) : (
           <div className="reader-portrait fallback" aria-hidden="true">
@@ -60,4 +50,4 @@ export const ReaderCard = memo(function ReaderCard({
       </div>
     </article>
   );
-});
+}
