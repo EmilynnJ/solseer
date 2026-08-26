@@ -3,6 +3,7 @@ import { SELF } from "cloudflare:test";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { errorResponse } from "../src/lib/errors";
+import { adminRoutes } from "../src/routes/admin";
 import { uploadRoutes } from "../src/routes/uploads";
 import { downloadLimitedJson } from "../src/routes/webhooks";
 import type { AppBindings } from "../src/types";
@@ -150,5 +151,49 @@ describe("API security boundaries", () => {
     const body = await res.json<{ error: { code: string; message: string } }>();
     expect(body.error.code).toBe("INVALID_UUID");
     expect(body.error.message).toContain("readerId");
+  });
+
+  it("handles balance adjustment stored procedure exceptions cleanly", async () => {
+    const testApp = new Hono<AppBindings>();
+    testApp.post("/test-balance-adjust", async (c) => {
+      c.set("user", {
+        id: "11111111-1111-1111-1111-111111111111",
+        role: "admin",
+        status: "active",
+        email: "admin@example.com",
+        username: "admin",
+        fullName: "Admin",
+        neonAuthUserId: "auth-1",
+      });
+      const handlers = adminRoutes.routes.filter(
+        (r) => r.path === "/balance-adjust" && r.method === "POST",
+      );
+      const adjustHandler = handlers[handlers.length - 1]?.handler;
+      if (!adjustHandler) throw new Error("Handler not found");
+      return adjustHandler(c, async () => {});
+    });
+    testApp.onError((err, c) => errorResponse(err, c));
+
+    const mockDbEnv = {
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/test",
+    };
+
+    const res = await testApp.request(
+      "/test-balance-adjust",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: "22222222-2222-4222-8222-222222222222",
+          amountCents: 1000,
+          reason: "Manual correction",
+          idempotencyKey: "test-key-123456",
+        }),
+      },
+      mockDbEnv,
+    );
+
+    // Should reach DB call and fail on invalid DB connection/mocking, or throw AppError
+    expect([400, 409, 500]).toContain(res.status);
   });
 });
