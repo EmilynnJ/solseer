@@ -155,7 +155,7 @@ describe("API security boundaries", () => {
 
   it("handles balance adjustment stored procedure exceptions cleanly", async () => {
     const testApp = new Hono<AppBindings>();
-    testApp.post("/test-balance-adjust", async (c) => {
+    testApp.post("/test-balance-adjust", (c) => {
       c.set("user", {
         id: "11111111-1111-1111-1111-111111111111",
         role: "admin",

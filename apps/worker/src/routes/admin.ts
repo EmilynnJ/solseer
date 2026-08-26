@@ -263,7 +263,8 @@ adminRoutes.post("/balance-adjust", async (context) => {
         ${input.idempotencyKey}
       ) AS result
     `;
-    return context.json({ result: result.rows[0]?.result });
+    const value = result.rows[0]?.result;
+    return context.json({ result: value });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message.includes("invalid_adjustment")) {
