@@ -33,8 +33,9 @@ function readerSelect() {
     isOnline: readerProfiles.isOnline,
     lastHeartbeatAt: readerProfiles.lastHeartbeatAt,
     profileImageKey: readerProfiles.profileImageKey,
-    rating: sql<number>`coalesce(avg(${reviews.rating}), 0)::float`,
-    reviewCount: sql<number>`count(${reviews.id})::int`,
+    // ⚡ Bolt optimization: Subqueries instead of LEFT JOIN/GROUP BY to prevent reading memory bloat on large result sets
+    rating: sql<number>`coalesce((select avg(rating) from ${reviews} r where r.reader_id = ${readerProfiles.userId}), 0)::float`,
+    reviewCount: sql<number>`(select count(*)::int from ${reviews} r where r.reader_id = ${readerProfiles.userId})`,
   };
 }
 
@@ -57,9 +58,7 @@ async function listReaders(env: Env, onlineOnly: boolean) {
     .select(readerSelect())
     .from(readerProfiles)
     .innerJoin(users, eq(users.id, readerProfiles.userId))
-    .leftJoin(reviews, eq(reviews.readerId, readerProfiles.userId))
     .where(condition)
-    .groupBy(users.id, readerProfiles.userId)
     .orderBy(
       desc(
         sql`${readerProfiles.isOnline} AND ${readerProfiles.lastHeartbeatAt} > ${freshness}`,
@@ -82,7 +81,6 @@ readerRoutes.get("/:id", validateUuidParams("id"), async (context) => {
     .select(readerSelect())
     .from(readerProfiles)
     .innerJoin(users, eq(users.id, readerProfiles.userId))
-    .leftJoin(reviews, eq(reviews.readerId, readerProfiles.userId))
     .where(
       and(
         eq(readerProfiles.userId, id),
@@ -90,7 +88,6 @@ readerRoutes.get("/:id", validateUuidParams("id"), async (context) => {
         eq(users.status, "active"),
       ),
     )
-    .groupBy(users.id, readerProfiles.userId)
     .limit(1);
   if (!reader) throw new AppError(404, "READER_NOT_FOUND", "Reader not found.");
   const recentReviews = await db
