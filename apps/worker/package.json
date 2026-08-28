@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --port 8787",
-    "build": "wrangler deploy --dry-run --env=\"\" --outdir dist",
+    "build": "wrangler deploy --dry-run --env production --outdir dist",
     "deploy": "wrangler deploy --env production",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
