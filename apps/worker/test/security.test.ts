@@ -25,13 +25,15 @@ describe("API security boundaries", () => {
   it("configures fetch with redirect error mode in chat replay downloads", async () => {
     const originalFetch = globalThis.fetch;
     let fetchInit: RequestInit | undefined;
-    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    globalThis.fetch = (_input: RequestInfo | URL, init?: RequestInit) => {
       fetchInit = init;
-      return new Response(JSON.stringify({ text: "test" }), {
-        status: 200,
-        headers: { "Content-Length": "15" },
-      });
-    }) as typeof fetch;
+      return Promise.resolve(
+        new Response(JSON.stringify({ text: "test" }), {
+          status: 200,
+          headers: { "Content-Length": "15" },
+        }),
+      );
+    };
 
     try {
       await downloadLimitedJson("https://realtimekit.com/chat.json", 1000);
