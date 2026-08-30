@@ -23,12 +23,8 @@ export function PageIntro({
 }
 
 export function Stars({ value, count }: { value: number; count?: number }) {
-  const ariaLabel =
-    count !== undefined
-      ? `${value.toFixed(1)} out of 5 stars (${count} review${count === 1 ? "" : "s"})`
-      : `${value.toFixed(1)} out of 5 stars`;
   return (
-    <span className="stars" aria-label={ariaLabel}>
+    <span className="stars" aria-label={`${value.toFixed(1)} out of 5 stars`}>
       <Star size={15} fill="currentColor" aria-hidden="true" />{" "}
       {value.toFixed(1)}
       {count !== undefined && ` (${count})`}
