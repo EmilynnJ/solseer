@@ -36,7 +36,7 @@ importers:
         specifier: ^0.7.0-beta
         version: 0.7.0-beta(2f1c7a391b8578e2b19878679596c57a)
       '@soulseer/shared':
-        specifier: '*'
+        specifier: workspace:*
         version: link:../../packages/shared
       '@stripe/react-stripe-js':
         specifier: '*'
@@ -118,7 +118,7 @@ importers:
         specifier: '*'
         version: 1.1.0
       '@soulseer/shared':
-        specifier: '*'
+        specifier: workspace:*
         version: link:../../packages/shared
       drizzle-orm:
         specifier: '*'
