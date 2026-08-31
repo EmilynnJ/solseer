@@ -1,0 +1,3 @@
+## 2026-08-31 - Primitive Extraction in Better Auth Session Provider
+**Learning:** `authClient.useSession()` in Better Auth returns new object references for `session.data?.user` on session state evaluations. Using `session.data?.user` directly as a React hook dependency causes `refresh` callbacks and context values to re-instantiate, triggering redundant network fetches to `/auth/me` and app-wide re-renders.
+**Action:** Always extract primitive session fields (`sessionUserId`, `sessionUserEmail`, `sessionUserName`) from `session.data?.user` and use primitives as hook dependencies in auth context providers.
