@@ -253,35 +253,16 @@ adminRoutes.get("/transactions", async (context) => {
 adminRoutes.post("/balance-adjust", async (context) => {
   const input = adminBalanceAdjustmentSchema.parse(await context.req.json());
   const { sql: neonSql } = createDatabase(context.env.DATABASE_URL);
-  try {
-    const result = await neonSql`
-      SELECT public.adjust_wallet_balance(
-        ${input.userId}::uuid,
-        ${input.amountCents}::integer,
-        ${context.get("user").id}::uuid,
-        ${input.reason},
-        ${input.idempotencyKey}
-      ) AS result
-    `;
-    return context.json({ result: result.rows[0]?.result });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-    if (message.includes("invalid_adjustment")) {
-      throw new AppError(
-        400,
-        "INVALID_ADJUSTMENT",
-        "The balance adjustment parameter is invalid.",
-      );
-    }
-    if (message.includes("insufficient_balance")) {
-      throw new AppError(
-        409,
-        "INSUFFICIENT_BALANCE",
-        "User wallet has insufficient balance for this adjustment.",
-      );
-    }
-    throw error;
-  }
+  const result = await neonSql`
+    SELECT public.adjust_wallet_balance(
+      ${input.userId}::uuid,
+      ${input.amountCents}::integer,
+      ${context.get("user").id}::uuid,
+      ${input.reason},
+      ${input.idempotencyKey}
+    ) AS result
+  `;
+  return context.json({ result: result.rows[0]?.result });
 });
 
 adminRoutes.post("/refunds/:readingId", validateUuidParams("readingId"), async (context) => {

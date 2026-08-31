@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "concurrently": "latest",
-    "typescript": "^5.8.2"
+    "typescript": "latest"
   },
   "engines": {
     "node": ">=22"
