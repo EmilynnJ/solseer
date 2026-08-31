@@ -1,8 +1,10 @@
 /* eslint-disable @typescript-eslint/no-deprecated -- SELF remains the typed fetch binding in this test configuration. */
 import { SELF } from "cloudflare:test";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import * as dbModule from "../src/lib/db";
 import { errorResponse } from "../src/lib/errors";
+import { adminRoutes } from "../src/routes/admin";
 import { uploadRoutes } from "../src/routes/uploads";
 import { downloadLimitedJson } from "../src/routes/webhooks";
 import type { AppBindings } from "../src/types";
@@ -150,5 +152,59 @@ describe("API security boundaries", () => {
     const body = await res.json<{ error: { code: string; message: string } }>();
     expect(body.error.code).toBe("INVALID_UUID");
     expect(body.error.message).toContain("readerId");
+  });
+
+  it("handles balance adjustment database exceptions cleanly without unhandled errors", async () => {
+    const spy = vi.spyOn(dbModule, "createDatabase").mockImplementation(() => {
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock sql for test */
+      const mockSql = (async () => {
+        throw new Error("invalid_adjustment");
+      }) as any;
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock db for test */
+      return { db: {} as any, sql: mockSql };
+    });
+
+    const testApp = new Hono<AppBindings>();
+    testApp.post("/test-balance-adjust", async (c) => {
+      c.set("user", {
+        id: "11111111-1111-4111-8111-111111111111",
+        role: "admin",
+        status: "active",
+        email: "admin@example.com",
+        username: "admin",
+        fullName: "Admin",
+        neonAuthUserId: "auth-1",
+      });
+      const handlers = adminRoutes.routes.filter(
+        (r) => r.path === "/balance-adjust" && r.method === "POST",
+      );
+      const handler = handlers[handlers.length - 1]?.handler;
+      if (!handler) throw new Error("Handler not found");
+      return handler(c, async () => {});
+    });
+    testApp.onError((err, c) => errorResponse(err, c));
+
+    const res = await testApp.request(
+      "/test-balance-adjust",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: "22222222-2222-4222-8222-222222222222",
+          amountCents: 100,
+          reason: "Valid adjustment reason",
+          idempotencyKey: "idempotency-key-12345",
+        }),
+      },
+      {
+        DATABASE_URL: "postgresql://localhost:5432/test",
+      },
+    );
+
+    expect(res.status).toBe(400);
+    const body = await res.json<{ error: { code: string; message: string } }>();
+    expect(body.error.code).toBe("INVALID_ADJUSTMENT");
+
+    spy.mockRestore();
   });
 });
