@@ -1,10 +1,16 @@
+import { memo } from "react";
 import { Link } from "react-router-dom";
 import { MessageCircle, Mic, Video } from "lucide-react";
 import type { Reader } from "../types";
 import { API_ORIGIN, money } from "../lib/api";
 import { Stars } from "./ui";
 
-export function ReaderCard({ reader }: { reader: Reader }) {
+// Performance Optimization:
+// 1. Memoized with React.memo to avoid unnecessary re-renders when parent filter states
+//    (such as specialty, rates, or availability toggles on /readers) change.
+// 2. Added loading="lazy" and decoding="async" to reader profile images to defer loading
+//    and decoding off-screen images, improving main thread responsiveness.
+export const ReaderCard = memo(function ReaderCard({ reader }: { reader: Reader }) {
   return (
     <article className="reader-card reveal">
       <Link to={`/readers/${reader.id}`} className="reader-portrait-wrap">
@@ -13,6 +19,8 @@ export function ReaderCard({ reader }: { reader: Reader }) {
             className="reader-portrait"
             src={`${API_ORIGIN}/api/readers/${reader.id}/image`}
             alt={`${reader.fullName}, SoulSeer Reader`}
+            loading="lazy"
+            decoding="async"
           />
         ) : (
           <div className="reader-portrait fallback" aria-hidden="true">
@@ -50,4 +58,4 @@ export function ReaderCard({ reader }: { reader: Reader }) {
       </div>
     </article>
   );
-}
+});
