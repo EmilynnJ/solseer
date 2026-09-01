@@ -21,6 +21,8 @@ import { validateUuidParams } from "../lib/http";
 export const readerRoutes = new Hono<AppBindings>();
 
 function readerSelect() {
+  // ⚡ Bolt: Using correlated subqueries instead of LEFT JOIN + GROUP BY
+  // to avoid large intermediate result sets and memory bloat
   return {
     id: users.id,
     username: users.username,
@@ -33,8 +35,8 @@ function readerSelect() {
     isOnline: readerProfiles.isOnline,
     lastHeartbeatAt: readerProfiles.lastHeartbeatAt,
     profileImageKey: readerProfiles.profileImageKey,
-    rating: sql<number>`coalesce(avg(${reviews.rating}), 0)::float`,
-    reviewCount: sql<number>`count(${reviews.id})::int`,
+    rating: sql<number>`(select coalesce(avg(rating), 0)::float from ${reviews} where ${reviews.readerId} = ${users.id})`,
+    reviewCount: sql<number>`(select count(*)::int from ${reviews} where ${reviews.readerId} = ${users.id})`,
   };
 }
 
@@ -57,9 +59,7 @@ async function listReaders(env: Env, onlineOnly: boolean) {
     .select(readerSelect())
     .from(readerProfiles)
     .innerJoin(users, eq(users.id, readerProfiles.userId))
-    .leftJoin(reviews, eq(reviews.readerId, readerProfiles.userId))
     .where(condition)
-    .groupBy(users.id, readerProfiles.userId)
     .orderBy(
       desc(
         sql`${readerProfiles.isOnline} AND ${readerProfiles.lastHeartbeatAt} > ${freshness}`,
@@ -82,7 +82,6 @@ readerRoutes.get("/:id", validateUuidParams("id"), async (context) => {
     .select(readerSelect())
     .from(readerProfiles)
     .innerJoin(users, eq(users.id, readerProfiles.userId))
-    .leftJoin(reviews, eq(reviews.readerId, readerProfiles.userId))
     .where(
       and(
         eq(readerProfiles.userId, id),
@@ -90,7 +89,6 @@ readerRoutes.get("/:id", validateUuidParams("id"), async (context) => {
         eq(users.status, "active"),
       ),
     )
-    .groupBy(users.id, readerProfiles.userId)
     .limit(1);
   if (!reader) throw new AppError(404, "READER_NOT_FOUND", "Reader not found.");
   const recentReviews = await db
@@ -249,16 +247,23 @@ readerRoutes.get(
     const [summary] = await db
       .select({
         pendingPayout: pendingPayouts.availableAmount,
-        historicalEarnings: sql<number>`coalesce(sum(case when ${walletLedgerEntries.type} in ('reader_earning', 'message_earning') then ${walletLedgerEntries.amount} else 0 end), 0)::int`,
-        todayEarnings: sql<number>`coalesce(sum(case when ${walletLedgerEntries.type} in ('reader_earning', 'message_earning') and ${walletLedgerEntries.createdAt} >= date_trunc('day', now()) then ${walletLedgerEntries.amount} else 0 end), 0)::int`,
+        // ⚡ Bolt: Correlated subquery for aggregating earnings instead of LEFT JOIN + GROUP BY
+        historicalEarnings: sql<number>`(
+          select coalesce(sum(amount), 0)::int
+          from ${walletLedgerEntries}
+          where ${walletLedgerEntries.userId} = ${pendingPayouts.readerId}
+          and ${walletLedgerEntries.type} in ('reader_earning', 'message_earning')
+        )`,
+        todayEarnings: sql<number>`(
+          select coalesce(sum(amount), 0)::int
+          from ${walletLedgerEntries}
+          where ${walletLedgerEntries.userId} = ${pendingPayouts.readerId}
+          and ${walletLedgerEntries.type} in ('reader_earning', 'message_earning')
+          and ${walletLedgerEntries.createdAt} >= date_trunc('day', now())
+        )`,
       })
       .from(pendingPayouts)
-      .leftJoin(
-        walletLedgerEntries,
-        eq(walletLedgerEntries.userId, pendingPayouts.readerId),
-      )
-      .where(eq(pendingPayouts.readerId, user.id))
-      .groupBy(pendingPayouts.readerId);
+      .where(eq(pendingPayouts.readerId, user.id));
     const receivedReviews = await db
       .select({
         id: reviews.id,
