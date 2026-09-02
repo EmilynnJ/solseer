@@ -329,6 +329,7 @@ function SessionSummary({
                 <button
                   type="button"
                   aria-label={`${value} stars`}
+                  title={`${value} stars`}
                   className={value <= rating ? "active" : ""}
                   onClick={() => setRating(value)}
                   key={value}

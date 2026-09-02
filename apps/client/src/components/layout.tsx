@@ -38,6 +38,7 @@ export function Layout() {
         <button
           className="nav-toggle"
           aria-label={open ? "Close navigation" : "Open navigation"}
+          title={open ? "Close navigation" : "Open navigation"}
           aria-expanded={open}
           onClick={() => {
             setOpen(!open);
