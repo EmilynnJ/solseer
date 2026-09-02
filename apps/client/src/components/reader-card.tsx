@@ -1,16 +1,29 @@
+import { memo } from "react";
 import { Link } from "react-router-dom";
 import { MessageCircle, Mic, Video } from "lucide-react";
 import type { Reader } from "../types";
 import { API_ORIGIN, money } from "../lib/api";
 import { Stars } from "./ui";
 
-export function ReaderCard({ reader }: { reader: Reader }) {
+/**
+ * ReaderCard displays reader details in directory listings.
+ * ⚡ Performance optimizations:
+ * - Memoized with React.memo to prevent unnecessary re-renders when parent state (e.g. filters) changes.
+ * - Profile images use loading="lazy" and decoding="async" to reduce initial layout/network congestion.
+ */
+export const ReaderCard = memo(function ReaderCard({
+  reader,
+}: {
+  reader: Reader;
+}) {
   return (
     <article className="reader-card reveal">
       <Link to={`/readers/${reader.id}`} className="reader-portrait-wrap">
         {reader.profileImageKey ? (
           <img
             className="reader-portrait"
+            loading="lazy"
+            decoding="async"
             src={`${API_ORIGIN}/api/readers/${reader.id}/image`}
             alt={`${reader.fullName}, SoulSeer Reader`}
           />
@@ -50,4 +63,4 @@ export function ReaderCard({ reader }: { reader: Reader }) {
       </div>
     </article>
   );
-}
+});
