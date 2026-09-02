@@ -40,6 +40,28 @@ describe("RealtimeKit preset discovery", () => {
     );
   });
 
+  it("rejects presets that cannot prove distinct participant and host roles", () => {
+    expect(() =>
+      selectParticipantPresets(["viewer", "moderator"]),
+    ).toThrowError(
+      expect.objectContaining({
+        stage: "presets",
+        providerCodes: ["role_presets_not_found"],
+      }),
+    );
+  });
+
+  it("rejects one preset that matches both roles", () => {
+    expect(() =>
+      selectParticipantPresets(["group-host-participant"]),
+    ).toThrowError(
+      expect.objectContaining({
+        stage: "presets",
+        providerCodes: ["role_presets_not_distinct"],
+      }),
+    );
+  });
+
   it("uses the exact preset names returned by the RealtimeKit app", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
