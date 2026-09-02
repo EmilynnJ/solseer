@@ -40,11 +40,31 @@ describe("RealtimeKit preset discovery", () => {
     );
   });
 
-  it("uses Cloudflare's dashboard defaults without listing presets", async () => {
-    await expect(resolveParticipantPresets({} as Env)).resolves.toEqual({
-      client: "group-call-participant",
-      reader: "group-call-host",
+  it("uses the exact preset names returned by the RealtimeKit app", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          data: [
+            { id: "participant-preset-id", name: "group_call_participant" },
+            { id: "host-preset-id", name: "group_call_host" },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(resolveParticipantPresets(realtimeKitEnv)).resolves.toEqual({
+      client: "group_call_participant",
+      reader: "group_call_host",
     });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "https://api.cloudflare.com/client/v4/accounts/account-id/realtime/kit/app-id/presets",
+    );
+    expect(init.method).toBe("GET");
   });
 
   it("normalizes secret values and sends the documented meeting payload", async () => {
@@ -215,3 +235,4 @@ describe("RealtimeKit Preflight and Initial Connection ID relaxation", () => {
     expect(parsed.participant?.customParticipantId).toBe("non-uuid-user-id");
   });
 });
+
