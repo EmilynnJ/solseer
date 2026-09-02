@@ -70,8 +70,16 @@ async function resolveAccountSecrets(env: Env): Promise<Env> {
       if (typeof secret === "string") {
         resolvedEntries.push([name, secret]);
       }
-    } catch {
-      // Gracefully ignore bindings that are not SecretsStoreSecret (e.g. DurableObjectNamespace, ColoLocalActorNamespace)
+    } catch (error) {
+      // isSecretStoreBinding() already filtered out non-secret bindings
+      // (Durable Object namespaces, R2 buckets), so a throw here means an
+      // actual Secrets Store binding failed to resolve its value (the
+      // secret doesn't exist under this name, or account access is
+      // misconfigured). Log it instead of leaving downstream code to
+      // guess why a correctly-wired binding "went missing".
+      logger.warn("Secrets Store binding failed to resolve", { operation: name }, {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
