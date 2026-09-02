@@ -1,0 +1,3 @@
+## 2026-08-30 - Prevent Result Set Memory Bloat with Correlated Subqueries
+**Learning:** In Drizzle ORM/PostgreSQL, when querying main entities alongside aggregate stats from relations (e.g., fetching a reader list along with their average rating and review count), using a `LEFT JOIN` and `GROUP BY` pattern causes memory bloat. The database has to join many rows, increasing the intermediate result set size, which degrades pagination performance.
+**Action:** Replace the `LEFT JOIN` + `GROUP BY` patterns with correlated subqueries using `sql(...)` for calculating counts or averages of related records (e.g., `(select count(id) from reviews where reader_id = users.id)`). This avoids Cartesian products and improves query performance for large datasets.
