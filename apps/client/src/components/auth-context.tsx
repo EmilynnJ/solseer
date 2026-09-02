@@ -32,8 +32,14 @@ export function SoulAuthProvider({ children }: PropsWithChildren) {
   const [needsProfile, setNeedsProfile] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
 
+  // Optimization: Extract primitive session fields to prevent unnecessary re-fetches
+  // and re-renders when `session.data?.user` object reference changes across parent updates.
+  const sessionUserId = session.data?.user?.id;
+  const sessionUserEmail = session.data?.user?.email;
+  const sessionUserName = session.data?.user?.name;
+
   const refresh = useCallback(async () => {
-    if (!session.data?.user) {
+    if (!sessionUserId) {
       setMe(null);
       setNeedsProfile(false);
       setProfileError(null);
@@ -58,7 +64,7 @@ export function SoulAuthProvider({ children }: PropsWithChildren) {
     } finally {
       setProfileLoading(false);
     }
-  }, [session.data?.user]);
+  }, [sessionUserId]);
 
   useEffect(() => {
     void refresh();
@@ -67,28 +73,33 @@ export function SoulAuthProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     if (session.isPending) return;
 
-    const user = session.data?.user;
-    if (!user) {
+    if (!sessionUserId) {
       posthog.reset();
       return;
     }
 
-    posthog.identify(user.id, {
-      email: user.email,
-      name: user.name,
+    posthog.identify(sessionUserId, {
+      email: sessionUserEmail,
+      name: sessionUserName,
     });
-  }, [session.data?.user, session.isPending]);
+  }, [sessionUserId, sessionUserEmail, sessionUserName, session.isPending]);
+
+  const sessionUser = useMemo(
+    () =>
+      sessionUserId
+        ? {
+            id: sessionUserId,
+            email: sessionUserEmail ?? "",
+            name: sessionUserName ?? "",
+          }
+        : null,
+    [sessionUserId, sessionUserEmail, sessionUserName],
+  );
 
   const value = useMemo<AuthState>(
     () => ({
       me,
-      sessionUser: session.data?.user
-        ? {
-            id: session.data.user.id,
-            email: session.data.user.email,
-            name: session.data.user.name,
-          }
-        : null,
+      sessionUser,
       loading: session.isPending || profileLoading,
       needsProfile,
       profileError,
@@ -96,12 +107,12 @@ export function SoulAuthProvider({ children }: PropsWithChildren) {
     }),
     [
       me,
+      sessionUser,
+      session.isPending,
+      profileLoading,
       needsProfile,
       profileError,
-      profileLoading,
       refresh,
-      session.data?.user,
-      session.isPending,
     ],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
