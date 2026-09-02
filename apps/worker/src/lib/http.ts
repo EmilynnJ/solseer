@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from "hono";
 import { uuidSchema } from "@soulseer/shared";
 import { AppError } from "./errors";
+import { logger } from "./log";
 
 export function validateUuidParams(...names: string[]): MiddlewareHandler {
   return async (context, next) => {
@@ -46,11 +47,14 @@ export const exactOriginCors: MiddlewareHandler<{ Bindings: Env }> = async (
   next,
 ) => {
   const origin = context.req.header("Origin");
+  // FRONTEND_ORIGINS is typed as a required string, but a bad `wrangler
+  // deploy`/dashboard edit can still leave the binding unset at runtime; a
+  // missing var here must not crash every /api/* request.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  const frontendOrigins = context.env.FRONTEND_ORIGINS ?? "";
   const allowedOrigins = new Set([
     context.env.FRONTEND_ORIGIN,
-    ...context.env.FRONTEND_ORIGINS.split(",")
-      .map((value) => value.trim())
-      .filter(Boolean),
+    ...frontendOrigins.split(",").map((value) => value.trim()).filter(Boolean),
   ]);
   if (origin && !allowedOrigins.has(origin)) {
     throw new AppError(
@@ -112,6 +116,17 @@ export const rateLimit: MiddlewareHandler<{ Bindings: Env }> = async (
   next,
 ) => {
   if (new URL(context.req.url).pathname.startsWith("/api/webhooks/")) {
+    await next();
+    return;
+  }
+  // RATE_LIMITER is typed as a required binding, but a bad `wrangler
+  // deploy`/dashboard edit can still leave it unbound at runtime; fail open
+  // rather than 500ing every /api/* request.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  if (!context.env.RATE_LIMITER) {
+    logger.warn("RATE_LIMITER binding is missing; skipping rate limit.", {
+      route: new URL(context.req.url).pathname,
+    });
     await next();
     return;
   }
