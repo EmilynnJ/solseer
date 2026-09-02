@@ -399,7 +399,7 @@ adminRoutes.get("/financial-summary", async (context) => {
   const { db } = createDatabase(context.env.DATABASE_URL);
   const [pending] = await db
     .select({
-      total: sql<number>`coalesce(sum(${pendingPayouts.availableAmount}), 0)::int`,
+      total: sql<number>`(select coalesce(sum(${pendingPayouts.availableAmount}), 0)::int from ${pendingPayouts})`,
     })
     .from(pendingPayouts);
   const payouts = await db
