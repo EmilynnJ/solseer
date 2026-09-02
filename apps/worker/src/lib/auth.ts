@@ -28,8 +28,20 @@ function bearerToken(authorization: string | undefined): string {
 
 export const NEON_AUTH_ALGORITHMS = ["EdDSA", "RS256", "ES256"];
 
+function requiredEnvUrl(value: string | undefined, name: string): URL {
+  try {
+    return new URL(String(value));
+  } catch {
+    throw new AppError(
+      500,
+      "AUTH_CONFIG_ERROR",
+      `Server misconfiguration: ${name} is not set to a valid URL.`,
+    );
+  }
+}
+
 export function neonAuthIssuer(authUrl: string): string {
-  return new URL(authUrl).origin;
+  return requiredEnvUrl(authUrl, "NEON_AUTH_ISSUER").origin;
 }
 
 export async function verifyIdentityToken(
@@ -77,7 +89,7 @@ async function verifyIdentity(token: string, env: Env): Promise<AuthIdentity> {
   return verifyIdentityToken(
     token,
     neonAuthIssuer(env.NEON_AUTH_ISSUER),
-    createRemoteJWKSet(new URL(env.NEON_AUTH_JWKS_URL)),
+    createRemoteJWKSet(requiredEnvUrl(env.NEON_AUTH_JWKS_URL, "NEON_AUTH_JWKS_URL")),
   );
 }
 
