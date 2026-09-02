@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, asc, count, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import {
   FORUM_PAGE_SIZE,
   createForumCommentSchema,
@@ -31,19 +31,13 @@ forumRoutes.get("/posts", async (context) => {
       isLocked: forumPosts.isLocked,
       createdAt: forumPosts.createdAt,
       authorName: users.username,
-      commentCount: count(forumComments.id),
+      // ⚡ Bolt Optimization: Using a correlated subquery for commentCount instead of LEFT JOIN + GROUP BY
+      // prevents result set memory bloat and significantly improves pagination performance.
+      commentCount: sql<number>`(SELECT count(${forumComments.id})::int FROM ${forumComments} WHERE ${forumComments.postId} = ${forumPosts.id} AND ${forumComments.status} = 'visible')`,
     })
     .from(forumPosts)
     .innerJoin(users, eq(users.id, forumPosts.authorId))
-    .leftJoin(
-      forumComments,
-      and(
-        eq(forumComments.postId, forumPosts.id),
-        eq(forumComments.status, "visible"),
-      ),
-    )
     .where(eq(forumPosts.status, "visible"))
-    .groupBy(forumPosts.id, users.username)
     .orderBy(desc(forumPosts.createdAt))
     .limit(FORUM_PAGE_SIZE)
     .offset((page - 1) * FORUM_PAGE_SIZE);
