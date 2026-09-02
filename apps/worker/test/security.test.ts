@@ -8,7 +8,7 @@ import { downloadLimitedJson } from "../src/routes/webhooks";
 import type { AppBindings } from "../src/types";
 
 describe("API security boundaries", () => {
-  it("rejects untrusted domains and non-HTTPS protocols in chat download URLs (SSRF prevention)", async () => {
+  it("rejects untrusted domains, non-HTTPS protocols, and redirects in chat download URLs (SSRF prevention)", async () => {
     await expect(
       downloadLimitedJson("http://169.254.169.254/latest/meta-data", 1000),
     ).rejects.toThrow("Chat download URL must use HTTPS.");
@@ -20,6 +20,23 @@ describe("API security boundaries", () => {
     await expect(
       downloadLimitedJson("https://attacker.cloudflare.com.evil.com/chat.json", 1000),
     ).rejects.toThrow("Chat download URL domain is not allowed.");
+
+    // Verify fetch is invoked with redirect: "error" to prevent redirect-based SSRF bypasses
+    const originalFetch = globalThis.fetch;
+    let observedRedirectMode: string | undefined;
+    globalThis.fetch = (_input: RequestInfo | URL, init?: RequestInit) => {
+      observedRedirectMode = init?.redirect;
+      return Promise.reject(new Error("Network fetch prevented in test"));
+    };
+
+    try {
+      await expect(
+        downloadLimitedJson("https://realtimekit.com/chat.json", 1000),
+      ).rejects.toThrow("Network fetch prevented in test");
+      expect(observedRedirectMode).toBe("error");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
   it("rejects an unapproved browser origin", async () => {
     const response = await SELF.fetch("https://api.example.test/api/health", {
