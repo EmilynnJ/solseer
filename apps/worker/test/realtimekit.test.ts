@@ -43,7 +43,7 @@ describe("RealtimeKit preset discovery", () => {
   it("rejects presets that cannot prove distinct participant and host roles", () => {
     expect(() =>
       selectParticipantPresets(["viewer", "moderator"]),
-    ).toThrowError(
+    ).toThrow(
       expect.objectContaining({
         stage: "presets",
         providerCodes: ["role_presets_not_found"],
@@ -54,7 +54,7 @@ describe("RealtimeKit preset discovery", () => {
   it("rejects one preset that matches both roles", () => {
     expect(() =>
       selectParticipantPresets(["group-host-participant"]),
-    ).toThrowError(
+    ).toThrow(
       expect.objectContaining({
         stage: "presets",
         providerCodes: ["role_presets_not_distinct"],
