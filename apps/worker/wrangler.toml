@@ -53,6 +53,8 @@ FRONTEND_ORIGIN = "https://soul-seer.net"
 FRONTEND_ORIGINS = "https://soul-seer.net,https://www.soul-seer.net,https://solseer-client.vercel.app"
 REALTIMEKIT_WEBHOOK_PUBLIC_KEY_URL = "https://api.realtime.cloudflare.com/.well-known/webhooks.json"
 CLOUDFLARE_ACCOUNT_ID = "36814ac88bdb3e11aea039b9757b5cbd"
+NEON_AUTH_ISSUER = "https://ep-still-mud-aj5bg4yw.neonauth.c-3.us-east-2.aws.neon.tech/neondb/auth"
+NEON_AUTH_JWKS_URL = "https://ep-still-mud-aj5bg4yw.neonauth.c-3.us-east-2.aws.neon.tech/neondb/auth/.well-known/jwks.json"
 
 [env.production.secrets]
 required = ["DATABASE_URL", "UPLOAD_SIGNING_SECRET"]
@@ -69,16 +71,6 @@ bucket_name = "seer"
 name = "RATE_LIMITER"
 namespace_id = "1001"
 simple = { limit = 120, period = 60 }
-
-[[env.production.secrets_store_secrets]]
-binding = "NEON_AUTH_ISSUER"
-store_id = "ff0046cedef447d2a6a84d137b2fd0c3"
-secret_name = "NEON_AUTH_URL"
-
-[[env.production.secrets_store_secrets]]
-binding = "NEON_AUTH_JWKS_URL"
-store_id = "ff0046cedef447d2a6a84d137b2fd0c3"
-secret_name = "NEON_AUTH_JWKS_URL"
 
 [[env.production.secrets_store_secrets]]
 binding = "STRIPE_SECRET_KEY"
@@ -99,3 +91,4 @@ secret_name = "CLOUDFLARE_REALTIME_APP_ID"
 binding = "CLOUDFLARE_REALTIME_API_TOKEN"
 store_id = "ff0046cedef447d2a6a84d137b2fd0c3"
 secret_name = "CLOUDFLARE_REALTIME_API_TOKEN"
+

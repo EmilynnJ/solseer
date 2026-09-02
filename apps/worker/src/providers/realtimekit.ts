@@ -39,6 +39,15 @@ const refreshedTokenResponseSchema = z.object({
   data: z.object({ token: z.string().min(1) }),
 });
 
+const presetListResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.array(
+    z.object({
+      name: z.string().min(1),
+    }),
+  ),
+});
+
 const providerErrorResponseSchema = z.object({
   errors: z
     .array(
@@ -191,27 +200,38 @@ export function selectParticipantPresets(names: string[]): {
   client: string;
   reader: string;
 } {
-  const reader = findPreset(names, "soulseer-reader", "host") ?? names[0];
-  const client =
-    findPreset(names, "soulseer-client", "participant") ?? names[0];
-  if (!reader || !client) {
+  if (names.length === 0) {
     throw new RealtimeKitProviderError("presets", 200, [
       "no_presets_configured",
+    ]);
+  }
+
+  const reader = findPreset(names, "soulseer-reader", "host");
+  const client = findPreset(names, "soulseer-client", "participant");
+  if (!reader || !client) {
+    throw new RealtimeKitProviderError("presets", 200, [
+      "role_presets_not_found",
+    ]);
+  }
+  if (reader === client) {
+    throw new RealtimeKitProviderError("presets", 200, [
+      "role_presets_not_distinct",
     ]);
   }
   return { client, reader };
 }
 
 export async function resolveParticipantPresets(
-  _env: RealtimeKitConfig,
+  env: RealtimeKitConfig,
 ): Promise<{ client: string; reader: string }> {
-  // Apps created in the Cloudflare dashboard always receive these defaults.
-  // Starting a reading must not depend on the separate preset-list permission:
-  // the Add Participant API is the authoritative validation point.
-  return {
-    client: "group-call-participant",
-    reader: "group-call-host",
-  };
+  const result = await request(
+    env,
+    "/presets",
+    { method: "GET" },
+    presetListResponseSchema,
+    "presets",
+  );
+  return selectParticipantPresets(result.data.map((preset) => preset.name));
 }
 
 export async function createMeeting(
@@ -363,3 +383,4 @@ export async function verifyRealtimeKitSignature(
     rawBody,
   );
 }
+
