@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import {
   FORUM_PAGE_SIZE,
   createForumCommentSchema,
