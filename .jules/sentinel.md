@@ -7,3 +7,7 @@
 **Vulnerability:** External webhook payloads from RealtimeKit failed Zod validation with 400 Bad Request if the `participant.customParticipantId` field was omitted or contained non-UUID string identifiers, causing webhook processing to fail and state updates in DurableObjects to be missed.
 **Learning:** External provider webhook schemas should strictly enforce structure without over-constraining optional or provider-controlled vendor identifiers as mandatory strict UUIDs.
 **Prevention:** Validate external webhook participant IDs as flexible optional strings (`z.string().min(1).optional()`) so webhook delivery remains resilient while maintaining payload type safety.
+## 2023-10-27 - [Prevent Open Redirect SSRF]
+**Vulnerability:** The `fetch` API in Cloudflare Workers (and browsers) follows redirects by default, potentially allowing SSRF attacks if an attacker abuses an open redirect on an allowed domain.
+**Learning:** Checking the domain of the URL before calling `fetch` is insufficient to prevent SSRF if the allowed domain has an open redirect and `fetch` follows it to a forbidden target.
+**Prevention:** Add `redirect: "error"` or `redirect: "manual"` to the `fetch` options when fetching user-provided URLs that have passed a domain check.
