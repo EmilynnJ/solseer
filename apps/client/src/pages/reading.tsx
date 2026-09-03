@@ -19,6 +19,7 @@ import { api, duration, money } from "../lib/api";
 import { posthog } from "../lib/posthog";
 import { useApiData } from "../hooks/use-api";
 import { Button, Loading, Notice } from "../components/ui";
+import { useSoulAuth } from "../components/auth-context";
 
 type ReadingDetail = {
   reading: Reading & {
@@ -59,7 +60,7 @@ export function ReadingPage() {
         <Loading label="Preparing your private room…" />
       </div>
     );
-  if (detail.error || !detail.data)
+  if (!detail.data)
     return (
       <div className="reading-shell">
         <Notice tone="error">{detail.error ?? "Reading not found."}</Notice>
@@ -97,7 +98,12 @@ export function ReadingPage() {
       />
     );
   return (
-    <LiveRoom token={token} detail={detail.data} refresh={detail.refresh} />
+    <LiveRoom
+      key={`${id}:${token}`}
+      token={token}
+      detail={detail.data}
+      refresh={detail.refresh}
+    />
   );
 }
 
@@ -170,22 +176,37 @@ function LiveRoom({
 }) {
   const [meeting, initMeeting] = useRealtimeKitClient();
   const [error, setError] = useState<string | null>(null);
+  const [endError, setEndError] = useState<string | null>(null);
+  const [ending, setEnding] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const initialized = useRef(false);
+  const mounted = useRef(false);
   useEffect(() => {
-    if (initialized.current) return;
-    initialized.current = true;
-    void initMeeting({
-      authToken: token,
-      defaults: {
-        audio: detail.reading.type !== "chat",
-        video: detail.reading.type === "video",
-      },
-    })
-      .then((instance) => instance?.join())
-      .catch((cause) =>
-        setError(cause instanceof Error ? cause.message : "Connection failed."),
-      );
+    // A shared ref survives StrictMode's setup/cleanup/setup replay.
+    mounted.current = true;
+    if (!initialized.current) {
+      initialized.current = true;
+      void initMeeting({
+        authToken: token,
+        defaults: {
+          audio: detail.reading.type !== "chat",
+          video: detail.reading.type === "video",
+        },
+      })
+        .then(async (instance) => {
+          // RtkMeeting owns joining. Dispose late initialization after navigation.
+          if (!mounted.current) await instance?.leave();
+        })
+        .catch((cause: unknown) => {
+          if (mounted.current)
+            setError(
+              cause instanceof Error ? cause.message : "Connection failed.",
+            );
+        });
+    }
+    return () => {
+      mounted.current = false;
+    };
   }, [detail.reading.type, initMeeting, token]);
   useEffect(() => {
     const started = detail.reading.startedAt
@@ -205,16 +226,32 @@ function LiveRoom({
     detail.balance / detail.reading.pricePerMinute,
   );
   async function end() {
+    if (ending) return;
     if (
       !confirm(
         "End this reading for both participants? Final billing will be reconciled from secure session events.",
       )
     )
       return;
-    await api(`/readings/${detail.reading.id}/end`, { method: "POST" });
-    posthog.capture("reading_ended", { reading_type: detail.reading.type });
-    await meeting?.leave();
-    await refresh();
+    setEnding(true);
+    setEndError(null);
+    try {
+      await api(`/readings/${detail.reading.id}/end`, { method: "POST" });
+      posthog.capture("reading_ended", { reading_type: detail.reading.type });
+      try {
+        await meeting?.leave();
+      } finally {
+        await refresh();
+      }
+    } catch (cause) {
+      setEndError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to end the reading. Please try again.",
+      );
+    } finally {
+      setEnding(false);
+    }
   }
   return (
     <div className="live-room">
@@ -241,8 +278,12 @@ function LiveRoom({
           <span>Est. {money(estimated)}</span>
           <span>Balance {money(detail.balance)}</span>
         </div>
-        <Button className="end-button" onClick={() => void end()}>
-          <LogOut /> End session
+        <Button
+          className="end-button"
+          disabled={ending}
+          onClick={() => void end()}
+        >
+          <LogOut /> {ending ? "Ending session…" : "End session"}
         </Button>
       </header>
       {minutesLeft < 2 && (
@@ -251,23 +292,23 @@ function LiveRoom({
           The session will end safely before your balance goes below zero.
         </div>
       )}
-      {error && (
-        <Notice tone="error">
-          Connection issue: {error}. RealtimeKit will keep trying to reconnect.
-        </Notice>
-      )}
-      <RealtimeKitProvider
-        value={meeting}
-        fallback={<Loading label="Connecting to RealtimeKit…" />}
-      >
-        {meeting && (
-          <RtkMeeting
-            meeting={meeting}
-            showSetupScreen={false}
-            leaveOnUnmount={false}
-          />
-        )}
-      </RealtimeKitProvider>
+      {error && <Notice tone="error">Connection issue: {error}</Notice>}
+      {endError && <Notice tone="error">{endError}</Notice>}
+      <div className="meeting-stage">
+        <RealtimeKitProvider
+          value={meeting}
+          fallback={<Loading label="Connecting to RealtimeKit…" />}
+        >
+          {meeting && (
+            <RtkMeeting
+              meeting={meeting}
+              mode="fill"
+              showSetupScreen={false}
+              leaveOnUnmount={true}
+            />
+          )}
+        </RealtimeKitProvider>
+      </div>
     </div>
   );
 }
@@ -279,11 +320,16 @@ function SessionSummary({
   detail: ReadingDetail;
   onRated: () => void;
 }) {
+  const { me } = useSoulAuth();
+  const isClient = Boolean(
+    me?.user.id && me.user.id === detail.reading.clientId,
+  );
   const [rating, setRating] = useState(0);
   const [review, setReview] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (!isClient) return;
     try {
       await api(`/readings/${detail.reading.id}/rate`, {
         method: "POST",
@@ -306,7 +352,11 @@ function SessionSummary({
       <div className="summary-glow">
         <p className="eyebrow">Reading complete</p>
         <h1>May the clarity stay with you.</h1>
-        <p>Your final charges were reconciled from secure session events.</p>
+        <p>
+          {isClient
+            ? "Your final charges were reconciled from secure session events."
+            : "This reading has ended. Session billing was reconciled from secure session events."}
+        </p>
         <div className="summary-metrics">
           <article>
             <span>Duration</span>
@@ -316,45 +366,50 @@ function SessionSummary({
             <span>Final cost</span>
             <strong>{money(detail.reading.totalPrice)}</strong>
           </article>
-          <article>
-            <span>Remaining balance</span>
-            <strong>{money(detail.balance)}</strong>
-          </article>
+          {isClient && (
+            <article>
+              <span>Remaining balance</span>
+              <strong>{money(detail.balance)}</strong>
+            </article>
+          )}
         </div>
-        {!detail.reading.rating ? (
-          <form className="rating-form" onSubmit={submit}>
-            <h2>How did this reading feel?</h2>
-            <div className="rating-buttons" aria-label="Rating">
-              {[1, 2, 3, 4, 5].map((value) => (
-                <button
-                  type="button"
-                  aria-label={`${value} stars`}
-                  className={value <= rating ? "active" : ""}
-                  onClick={() => setRating(value)}
-                  key={value}
+        {isClient &&
+          (!detail.reading.rating ? (
+            <form className="rating-form" onSubmit={submit}>
+              <h2>How did this reading feel?</h2>
+              <div className="rating-buttons" aria-label="Rating">
+                {[1, 2, 3, 4, 5].map((value) => (
+                  <button
+                    type="button"
+                    aria-label={`${value} stars`}
+                    className={value <= rating ? "active" : ""}
+                    onClick={() => setRating(value)}
+                    key={value}
+                  >
+                    <Star fill="currentColor" />
+                  </button>
+                ))}
+              </div>
+              <textarea
+                maxLength={2000}
+                placeholder="Share a reflection (optional)"
+                value={review}
+                onChange={(e) => setReview(e.target.value)}
+              />
+              {message && (
+                <Notice
+                  tone={message.startsWith("Thank") ? "success" : "error"}
                 >
-                  <Star fill="currentColor" />
-                </button>
-              ))}
-            </div>
-            <textarea
-              maxLength={2000}
-              placeholder="Share a reflection (optional)"
-              value={review}
-              onChange={(e) => setReview(e.target.value)}
-            />
-            {message && (
-              <Notice tone={message.startsWith("Thank") ? "success" : "error"}>
-                {message}
-              </Notice>
-            )}
-            <Button disabled={!rating}>Share review</Button>
-          </form>
-        ) : (
-          <Notice tone="success">
-            Your review has been submitted. Thank you.
-          </Notice>
-        )}
+                  {message}
+                </Notice>
+              )}
+              <Button disabled={!rating}>Share review</Button>
+            </form>
+          ) : (
+            <Notice tone="success">
+              Your review has been submitted. Thank you.
+            </Notice>
+          ))}
         <Link className="text-link" to="/dashboard">
           Return to dashboard
         </Link>
