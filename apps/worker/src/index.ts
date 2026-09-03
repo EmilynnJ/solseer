@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { AppBindings } from "./types";
 import { errorResponse } from "./lib/errors";
+import { resolveAccountSecrets } from "./lib/account-secrets";
 import {
   boundedJson,
   exactOriginCors,
@@ -21,73 +22,6 @@ import { transactionRoutes, userRoutes } from "./routes/user";
 import { webhookRoutes } from "./routes/webhooks";
 
 export { ReadingCoordinator } from "./durable/reading-coordinator";
-
-const accountSecretNames = [
-  "NEON_AUTH_ISSUER",
-  "NEON_AUTH_JWKS_URL",
-  "STRIPE_SECRET_KEY",
-  "STRIPE_WEBHOOK_SECRET",
-  "REALTIMEKIT_APP_ID",
-  "CLOUDFLARE_REALTIMEKIT_APP_ID",
-  "CLOUDFLARE_REALTIMEKIT_API_TOKEN",
-  "TELNYX_API_KEY",
-  "TELNYX_FROM_NUMBER",
-] as const;
-
-type SecretStoreBinding = { get(): Promise<string> };
-
-function isSecretStoreBinding(value: unknown): value is SecretStoreBinding {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "get" in value &&
-    typeof (value as SecretStoreBinding).get === "function" &&
-    !("idFromName" in value) && // Exclude DurableObjectNamespace
-    !("put" in value) // Exclude R2Bucket
-  );
-}
-
-async function resolveAccountSecrets(env: Env): Promise<Env> {
-  const keys = new Set<string>([
-    ...accountSecretNames,
-    ...Object.keys(env || {}),
-  ]);
-
-  const accountBindings: [string, SecretStoreBinding][] = [];
-  for (const key of keys) {
-    const binding = env[key as keyof Env] as unknown;
-    if (isSecretStoreBinding(binding)) {
-      accountBindings.push([key, binding]);
-    }
-  }
-
-  if (accountBindings.length === 0) return env;
-
-  const resolvedEntries: [string, string][] = [];
-  for (const [name, binding] of accountBindings) {
-    try {
-      const secret = await binding.get();
-      if (typeof secret === "string") {
-        resolvedEntries.push([name, secret]);
-      }
-    } catch (error) {
-      // isSecretStoreBinding() already filtered out non-secret bindings
-      // (Durable Object namespaces, R2 buckets), so a throw here means an
-      // actual Secrets Store binding failed to resolve its value (the
-      // secret doesn't exist under this name, or account access is
-      // misconfigured). Log it instead of leaving downstream code to
-      // guess why a correctly-wired binding "went missing".
-      logger.warn("Secrets Store binding failed to resolve", { operation: name }, {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  return {
-    ...env,
-    ...Object.fromEntries(resolvedEntries),
-  } as Env;
-}
 
 const app = new Hono<AppBindings>();
 
