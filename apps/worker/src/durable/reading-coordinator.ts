@@ -6,6 +6,7 @@ import {
   readingSessions,
 } from "@soulseer/shared";
 import { createDatabase } from "../lib/db";
+import { resolveAccountSecrets } from "../lib/account-secrets";
 import { logger } from "../lib/log";
 import { disableMeeting, endSession } from "../providers/realtimekit";
 
@@ -277,8 +278,11 @@ export class ReadingCoordinator extends DurableObject<Env> {
     await this.ctx.storage.deleteAlarm();
 
     try {
-      await endSession(this.env, state.meetingId);
-      await disableMeeting(this.env, state.meetingId);
+      // Alarms and RPC calls receive the original bindings, not app.fetch's
+      // resolved environment. Resolve per attempt so retries see rotated secrets.
+      const providerEnv = await resolveAccountSecrets(this.env);
+      await endSession(providerEnv, state.meetingId);
+      await disableMeeting(providerEnv, state.meetingId);
       const durationSeconds = Math.max(
         0,
         Math.floor(state.connectedAccumulatedMs / 1000),

@@ -6,8 +6,19 @@ const accountSecretNames = [
   "STRIPE_SECRET_KEY",
   "STRIPE_WEBHOOK_SECRET",
   "REALTIMEKIT_APP_ID",
+  "CLOUDFLARE_REALTIME_APP_ID",
   "CLOUDFLARE_REALTIMEKIT_APP_ID",
+  "REALTIMEKIT_API_APP_ID",
+  "REALTIMEKIT_APP_ID_API",
+  "REALTIMEKIT_APP_API_ID",
+  "REALTIME_APP_ID",
   "CLOUDFLARE_REALTIMEKIT_API_TOKEN",
+  "REALTIMEKIT_API_TOKEN",
+  "CLOUDFLARE_REALTIME_TOKEN",
+  "REALTIME_TOKEN",
+  "CLOUDFLARE_REALTIME_API_TOKEN",
+  "REALTIME_API_TOKEN",
+  "REALTIMEKIT_TOKEN",
   "TELNYX_API_KEY",
   "TELNYX_FROM_NUMBER",
 ] as const;
@@ -15,7 +26,7 @@ const accountSecretNames = [
 type SecretStoreBinding = { get(): Promise<string> };
 
 export async function resolveAccountSecrets(env: Env): Promise<Env> {
-  const resolvedEntries: [string, string][] = [];
+  const resolvedBindings: Record<string, string | undefined> = {};
   // RPC bindings can report arbitrary method names as present. In particular,
   // testing for `put`/`idFromName` incorrectly excludes Secrets Store bindings.
   // Only inspect declared secret names, never unrelated R2/DO/service bindings.
@@ -26,18 +37,20 @@ export async function resolveAccountSecrets(env: Env): Promise<Env> {
       typeof (binding as SecretStoreBinding).get !== "function"
     ) continue;
 
+    // A failed binding must not remain a truthy object in provider config.
+    resolvedBindings[name] = undefined;
     try {
       const secret = await (binding as SecretStoreBinding).get();
       if (typeof secret === "string" && secret.trim()) {
-        resolvedEntries.push([name, secret]);
+        resolvedBindings[name] = secret;
       } else {
         logger.warn("Secrets Store binding returned an empty value", { operation: name });
       }
     } catch {
       // Never log secret values or provider exception text, which may contain
-      // credentials. Preserve the binding so downstream validation fails closed.
+      // credentials. Leave the failed credential unavailable to consumers.
       logger.warn("Secrets Store binding failed to resolve", { operation: name });
     }
   }
-  return { ...env, ...Object.fromEntries(resolvedEntries) };
+  return { ...env, ...resolvedBindings };
 }
