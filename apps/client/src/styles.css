@@ -1608,6 +1608,7 @@ td small {
   flex-direction: column;
 }
 .session-bar {
+  flex-shrink: 0;
   min-height: 72px;
   background: var(--surface);
   border-bottom: 1px solid var(--line);
@@ -1651,11 +1652,18 @@ td small {
   color: #fff;
 }
 .low-balance {
+  flex-shrink: 0;
   background: #5a3d12;
   color: #ffe5a2;
   padding: 0.6rem;
   text-align: center;
   font-size: 0.8rem;
+}
+.meeting-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  isolation: isolate;
 }
 .live-room rtk-meeting {
   height: 100%;

@@ -19,7 +19,7 @@ import {
   Star,
   Users,
 } from "lucide-react";
-import { TOP_UP_PRESETS_CENTS } from "@soulseer/shared";
+import { readerNotificationSettingsSchema, TOP_UP_PRESETS_CENTS } from "@soulseer/shared";
 import type { LedgerEntry, Reading } from "../types";
 import { API_ORIGIN, api, dateTime, duration, money } from "../lib/api";
 import { useApiData } from "../hooks/use-api";
@@ -398,6 +398,8 @@ function ReaderDashboard() {
     phoneNumber: reader?.phoneNumber ?? "",
     smsNotificationsEnabled: reader?.smsNotificationsEnabled ?? false,
   });
+  const [notificationError, setNotificationError] = useState<string | null>(null);
+  const [notificationSaved, setNotificationSaved] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   useEffect(() => {
     if (!reader?.isOnline) return;
@@ -451,19 +453,28 @@ function ReaderDashboard() {
   }
   async function saveNotifications(e: FormEvent) {
     e.preventDefault();
+    setNotificationError(null);
+    setNotificationSaved(false);
+    // Preserve an explicit country code; do not guess a destination country.
+    const input = readerNotificationSettingsSchema.safeParse({
+      phoneNumber: notifications.phoneNumber.trim().replace(/[\s().-]/g, "") || null,
+      smsNotificationsEnabled: notifications.smsNotificationsEnabled,
+    });
+    if (!input.success) {
+      setNotificationError(input.error.issues[0]?.message ?? "Check your mobile number.");
+      return;
+    }
     setSaving(true);
     try {
       await api("/readers/notifications", {
         method: "PATCH",
-        body: JSON.stringify({
-          phoneNumber: notifications.phoneNumber.trim() || null,
-          smsNotificationsEnabled: notifications.smsNotificationsEnabled,
-        }),
+        body: JSON.stringify(input.data),
       });
+      setNotifications({ ...input.data, phoneNumber: input.data.phoneNumber ?? "" });
       await refreshMe();
-      setMessage("Text notification settings saved.");
+      setNotificationSaved(true);
     } catch (cause) {
-      setMessage(
+      setNotificationError(
         cause instanceof Error
           ? cause.message
           : "Unable to save text notification settings.",
@@ -635,6 +646,9 @@ function ReaderDashboard() {
               inputMode="tel"
               autoComplete="tel"
               placeholder="+15551234567"
+              aria-describedby="reading-alert-phone-help"
+              aria-invalid={Boolean(notificationError)}
+              disabled={saving}
               value={notifications.phoneNumber}
               onChange={(event) =>
                 setNotifications({
@@ -644,9 +658,13 @@ function ReaderDashboard() {
               }
             />
           </label>
+          <small id="reading-alert-phone-help">
+            Include + and your country code, for example +1 555 123 4567 for a US or Canadian number.
+          </small>
           <label className="checkbox-row">
             <input
               type="checkbox"
+              disabled={saving}
               checked={notifications.smsNotificationsEnabled}
               onChange={(event) =>
                 setNotifications({
@@ -658,6 +676,8 @@ function ReaderDashboard() {
             Text me when a client requests a reading. Message and data rates may
             apply. Reply STOP to opt out.
           </label>
+          {notificationError && <Notice tone="error">{notificationError}</Notice>}
+          {notificationSaved && <Notice tone="success">Text notification settings saved.</Notice>}
           <Button disabled={saving}>Save reading alerts</Button>
         </form>
       </DashboardSection>

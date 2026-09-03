@@ -48,6 +48,37 @@ export function HelpPage() {
           </details>
         ))}
       </section>
+      <section
+        id="accessibility"
+        aria-labelledby="accessibility-heading"
+        className="legal-copy"
+      >
+        <h2 id="accessibility-heading">Accessibility statement</h2>
+        <p>
+          SoulSeer is committed to making our website and app more accessible to
+          people with disabilities. We are working to identify and remove
+          barriers to using our services.
+        </p>
+        <p>
+          Accessibility is an ongoing effort. Some features, including
+          third-party reading and payment tools, may have limitations. This
+          statement is not a certification of full accessibility or legal
+          compliance.
+        </p>
+        <p>
+          If you encounter a barrier or need assistance or an alternative way to
+          access a service, please{" "}
+          <a
+            href={`mailto:${String(import.meta.env.VITE_SUPPORT_EMAIL || "support@soulseer.com")}?subject=Accessibility%20assistance`}
+          >
+            contact support about accessibility
+          </a>
+          . Include the page or feature, what went wrong, and your preferred way
+          for us to respond. Browser and assistive-technology details are
+          helpful but optional. Please do not send passwords, payment details,
+          or private reading content.
+        </p>
+      </section>
       <section className="support-callout">
         <Mail />
         <div>
