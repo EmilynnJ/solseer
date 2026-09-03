@@ -118,6 +118,7 @@ export function Layout() {
         <div className="footer-links">
           <Link to="/privacy">Privacy</Link>
           <Link to="/help">Help</Link>
+          <Link to="/help#accessibility">Accessibility</Link>
           <a
             href={
               import.meta.env.VITE_FACEBOOK_GROUP_URL ||
