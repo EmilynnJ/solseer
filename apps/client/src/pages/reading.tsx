@@ -33,6 +33,10 @@ type ReadingDetail = {
 
 export function ReadingPage() {
   const { id = "" } = useParams();
+  return <ReadingSession key={id} id={id} />;
+}
+
+function ReadingSession({ id }: { id: string }) {
   const detail = useApiData(() => api<ReadingDetail>(`/readings/${id}`), [id]);
   const [token, setToken] = useState<string | null>(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
@@ -324,12 +328,13 @@ function SessionSummary({
   const isClient = Boolean(
     me?.user.id && me.user.id === detail.reading.clientId,
   );
+  const canReview = isClient && me?.user.role === "client";
   const [rating, setRating] = useState(0);
   const [review, setReview] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!isClient) return;
+    if (!canReview) return;
     try {
       await api(`/readings/${detail.reading.id}/rate`, {
         method: "POST",
@@ -373,7 +378,7 @@ function SessionSummary({
             </article>
           )}
         </div>
-        {isClient &&
+        {canReview &&
           (!detail.reading.rating ? (
             <form className="rating-form" onSubmit={submit}>
               <h2>How did this reading feel?</h2>
