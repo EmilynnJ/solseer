@@ -7,7 +7,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ReadingPage } from "../pages/reading";
 
@@ -64,8 +64,8 @@ vi.mock("@cloudflare/realtimekit-react", async () => {
     RealtimeKitProvider: ({ children }: { children: ReactNode }) => children,
     useRealtimeKitClient: () => {
       const [meeting, setMeeting] = useState<typeof instance>();
-      const init = useCallback(async () => {
-        const result = (await mocks.init()) as typeof instance;
+      const init = useCallback(async (options: { authToken: string }) => {
+        const result = (await mocks.init(options)) as typeof instance;
         setMeeting(result);
         return result;
       }, []);
@@ -97,6 +97,7 @@ beforeEach(() => {
   mocks.userId = "client-1";
   mocks.role = "client";
   detail.reading.status = "active";
+  detail.reading.id = "reading-1";
   mocks.api.mockResolvedValue({ participantToken: "participant-token" });
   mocks.init.mockResolvedValue(instance);
   mocks.join.mockResolvedValue(undefined);
@@ -127,13 +128,13 @@ describe("reading review permissions", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("allows a reader account to review when it is the client in this reading", () => {
+  it("hides reviews for reader accounts because the review API requires the client role", () => {
     detail.reading.status = "ended";
     mocks.role = "reader";
     render(page());
     expect(
-      screen.getByRole("button", { name: "Share review" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Share review" }),
+    ).not.toBeInTheDocument();
   });
 
   it("does not offer reviews to an unrelated account", () => {
@@ -151,6 +152,28 @@ afterEach(() => {
 });
 
 describe("reading connection lifecycle", () => {
+  it("requests the new reading token instead of reusing the old token after route navigation", async () => {
+    mocks.api.mockResolvedValueOnce({ participantToken: "token-reading-1" });
+    render(
+      <MemoryRouter initialEntries={["/readings/reading-1"]}>
+        <Link to="/readings/reading-2">Open another reading</Link>
+        <Routes>
+          <Route path="/readings/:id" element={<ReadingPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByLabelText("Private meeting");
+    expect(mocks.init).toHaveBeenCalledWith(expect.objectContaining({ authToken: "token-reading-1" }));
+    detail.reading.id = "reading-2";
+    mocks.api.mockResolvedValue({ participantToken: "token-reading-2" });
+    fireEvent.click(screen.getByRole("link", { name: "Open another reading" }));
+    await waitFor(() => {
+      expect(mocks.api).toHaveBeenCalledWith("/readings/reading-2/participant-token", { method: "POST" });
+      expect(mocks.init).toHaveBeenCalledTimes(2);
+    });
+    expect(mocks.init).toHaveBeenNthCalledWith(2, expect.objectContaining({ authToken: "token-reading-2" }));
+  });
+
   it("leaves joining to the meeting UI instead of issuing a second join", async () => {
     render(page());
     await screen.findByLabelText("Private meeting");
