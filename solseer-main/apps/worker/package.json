@@ -1,0 +1,40 @@
+{
+  "name": "@soulseer/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8787",
+    "build": "wrangler deploy --dry-run --env=\"\" --outdir dist",
+    "deploy": "wrangler deploy --env production",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src test --max-warnings=0",
+    "cf:types": "wrangler types worker-configuration.d.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx scripts/migrate.ts"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "*",
+    "@soulseer/shared": "*",
+    "drizzle-orm": "*",
+    "hono": "^4.13.0",
+    "jose": "*",
+    "stripe": "*",
+    "zod": "*"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.20.3",
+    "@cloudflare/workers-types": "*",
+    "@eslint/js": "*",
+    "@types/node": "*",
+    "drizzle-kit": "*",
+    "eslint": "*",
+    "eslint-plugin-import-x": "*",
+    "globals": "*",
+    "tsx": "*",
+    "typescript-eslint": "*",
+    "vitest": "*",
+    "wrangler": "^4.120.0"
+  }
+}
