@@ -7,3 +7,8 @@
 **Vulnerability:** External webhook payloads from RealtimeKit failed Zod validation with 400 Bad Request if the `participant.customParticipantId` field was omitted or contained non-UUID string identifiers, causing webhook processing to fail and state updates in DurableObjects to be missed.
 **Learning:** External provider webhook schemas should strictly enforce structure without over-constraining optional or provider-controlled vendor identifiers as mandatory strict UUIDs.
 **Prevention:** Validate external webhook participant IDs as flexible optional strings (`z.string().min(1).optional()`) so webhook delivery remains resilient while maintaining payload type safety.
+## 2024-03-22 - Prevent SSRF via Redirects
+
+**Vulnerability:** Found an SSRF vulnerability where a URL fetched via `fetch` passes domain validation but could potentially redirect to internal/malicious network addresses because `fetch` follows redirects by default.
+**Learning:** Even if a URL is validated against an allowlist, if the underlying HTTP client follows redirects, it can be bypassed to hit internal services or arbitrary endpoints.
+**Prevention:** Always use `redirect: "error"` or `redirect: "manual"` in the `fetch` options when requesting user-supplied URLs after domain validation.

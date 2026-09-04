@@ -289,7 +289,10 @@ export async function downloadLimitedJson(
     throw new Error("Chat download URL domain is not allowed.");
   }
 
-  const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(10_000),
+    redirect: "error",
+  });
   if (!response.ok || !response.body)
     throw new Error("Chat replay download failed.");
   const statedLength = Number(response.headers.get("Content-Length") ?? 0);
@@ -298,6 +301,7 @@ export async function downloadLimitedJson(
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let received = 0;
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   while (true) {
     const { value, done } = await reader.read();
     if (done) break;
