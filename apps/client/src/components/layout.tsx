@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
   Globe2,
-  Heart,
   LogOut,
   Menu,
   MessageCircle,
@@ -117,8 +116,11 @@ export function Layout() {
         </div>
         <div className="footer-links">
           <Link to="/privacy">Privacy</Link>
+          <Link to="/terms">Terms of Use</Link>
+          <Link to="/acceptable-use">Acceptable Use</Link>
+          <Link to="/eula">EULA</Link>
           <Link to="/help">Help</Link>
-          <Link to="/help#accessibility">Accessibility</Link>
+          <Link to="/accessibility">Accessibility</Link>
           <a
             href={
               import.meta.env.VITE_FACEBOOK_GROUP_URL ||
@@ -139,11 +141,16 @@ export function Layout() {
             <MessageCircle size={16} /> Discord
           </a>
         </div>
-        <p className="copyright">
-          <Heart size={13} /> Spiritual guidance is for personal insight and
-          entertainment; it is not medical, legal, or financial advice. ©{" "}
-          {new Date().getFullYear()} SoulSeer.
-        </p>
+        <div className="copyright footer-accessibility">
+          <p>
+            SoulSeer is committed to providing an accessible website for people
+            with disabilities. If you experience difficulty accessing any part
+            of our site, please contact{" "}
+            <a href="mailto:support@soul-seer.net?subject=Accessibility%20assistance">support@soul-seer.net</a>{" "}
+            for assistance. <Link to="/accessibility">Accessibility Statement</Link>
+          </p>
+          <p>© {new Date().getFullYear()} SoulSeer.</p>
+        </div>
       </footer>
     </div>
   );

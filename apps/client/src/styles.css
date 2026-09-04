@@ -226,6 +226,16 @@ h3 {
   width: min(1240px, calc(100% - 3rem));
   margin-inline: auto;
 }
+.footer-accessibility {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.footer-accessibility a {
+  color: var(--pink-soft);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.footer-accessibility p + p { margin-top: 0.75rem; }
 .page-shell {
   padding-block: clamp(3.5rem, 8vw, 8rem);
 }

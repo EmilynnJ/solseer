@@ -44,8 +44,8 @@ const MessagesPage = lazy(() =>
 const HelpPage = lazy(() =>
   import("./pages/info").then((module) => ({ default: module.HelpPage })),
 );
-const PrivacyPage = lazy(() =>
-  import("./pages/info").then((module) => ({ default: module.PrivacyPage })),
+const PolicyPage = lazy(() =>
+  import("./pages/policy").then((module) => ({ default: module.PolicyPage })),
 );
 
 export function App() {
@@ -97,7 +97,11 @@ export function App() {
                   }
                 />
                 <Route path="help" element={<HelpPage />} />
-                <Route path="privacy" element={<PrivacyPage />} />
+                <Route path="privacy" element={<PolicyPage policy="privacy" />} />
+                <Route path="terms" element={<PolicyPage policy="terms" />} />
+                <Route path="acceptable-use" element={<PolicyPage policy="acceptable-use" />} />
+                <Route path="accessibility" element={<PolicyPage policy="accessibility" />} />
+                <Route path="eula" element={<PolicyPage policy="eula" />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Routes>

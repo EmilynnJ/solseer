@@ -21,7 +21,9 @@ it("links the site footer to an accessibility statement", () => {
     within(screen.getByRole("contentinfo")).getByRole("link", {
       name: "Accessibility",
     }),
-  ).toHaveAttribute("href", "/help#accessibility");
+  ).toHaveAttribute("href", "/accessibility");
+  expect(screen.getByRole("contentinfo")).not.toHaveTextContent("entertainment");
+  expect(screen.getByRole("contentinfo")).toHaveTextContent("accessible website for people with disabilities");
 });
 
 it("offers a labeled accessibility statement and contact route without claiming certification", () => {
