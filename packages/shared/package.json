@@ -18,6 +18,7 @@
     "zod": "latest"
   },
   "devDependencies": {
+    "typescript": "latest",
     "vitest": "latest"
   }
 }
