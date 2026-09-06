@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { PageIntro } from "../components/ui";
+import DOMPurify from "dompurify";
 import privacy from "../content/policies/privacy.html?raw";
 import terms from "../content/policies/terms.html?raw";
 import acceptableUse from "../content/policies/acceptable-use.html?raw";
@@ -22,11 +23,15 @@ export function PolicyPage({ policy }: { policy: keyof typeof policies }) {
     const previousTitle = document.title;
     document.title = `${title} | SoulSeer`;
     if (window.location.hash) {
-      document.getElementById(decodeURIComponent(window.location.hash.slice(1)))?.scrollIntoView();
+      document
+        .getElementById(decodeURIComponent(window.location.hash.slice(1)))
+        ?.scrollIntoView();
     } else {
       window.scrollTo(0, 0);
     }
-    return () => { document.title = previousTitle; };
+    return () => {
+      document.title = previousTitle;
+    };
   }, [title]);
 
   return (
@@ -34,13 +39,21 @@ export function PolicyPage({ policy }: { policy: keyof typeof policies }) {
       <PageIntro eyebrow="SoulSeer policies" title={title} />
       <nav className="policy-navigation" aria-label="Policies">
         {Object.entries(policies).map(([slug, item]) => (
-          <Link key={slug} to={`/${slug}`} aria-current={slug === policy ? "page" : undefined}>
+          <Link
+            key={slug}
+            to={`/${slug}`}
+            aria-current={slug === policy ? "page" : undefined}
+          >
             {item.title}
           </Link>
         ))}
       </nav>
       {/* Reviewed, local policy HTML only. Never interpolate user or API content here. */}
-      <article className="policy-document" aria-label={title} dangerouslySetInnerHTML={{ __html: html }} />
+      <article
+        className="policy-document"
+        aria-label={title}
+        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html) }}
+      />
     </div>
   );
 }
