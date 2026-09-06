@@ -396,4 +396,3 @@ export async function verifyRealtimeKitSignature(
     rawBody,
   );
 }
-

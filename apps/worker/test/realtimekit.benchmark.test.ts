@@ -12,16 +12,18 @@ describe("RealtimeKit Webhook Signature Optimization Benchmark", () => {
         hash: "SHA-256",
       },
       true,
-      ["sign", "verify"]
+      ["sign", "verify"],
     );
 
     const rawBody = new TextEncoder().encode("test payload");
     const signature = await crypto.subtle.sign(
       "RSASSA-PKCS1-v1_5",
       keyPair.privateKey,
-      rawBody
+      rawBody,
     );
-    const signatureString = btoa(String.fromCharCode(...new Uint8Array(signature)));
+    const signatureString = btoa(
+      String.fromCharCode(...new Uint8Array(signature)),
+    );
 
     // Get the SPKI format of the generated public key
     const spkiBuffer = await crypto.subtle.exportKey("spki", keyPair.publicKey);
@@ -31,12 +33,14 @@ describe("RealtimeKit Webhook Signature Optimization Benchmark", () => {
     let fetchCallCount = 0;
     vi.stubGlobal("fetch", async () => {
       // Simulate network delay to make the benchmark realistic
-      await new Promise(r => setTimeout(r, 10));
+      await new Promise((r) => setTimeout(r, 10));
       fetchCallCount++;
-      return new Response(JSON.stringify({
-        success: true,
-        data: { publicKey: actualMockPublicKey }
-      }));
+      return new Response(
+        JSON.stringify({
+          success: true,
+          data: { publicKey: actualMockPublicKey },
+        }),
+      );
     });
 
     const start = performance.now();
@@ -44,16 +48,18 @@ describe("RealtimeKit Webhook Signature Optimization Benchmark", () => {
     let result = false;
     console.log(result);
     for (let i = 0; i < iterations; i++) {
-        result = await verifyRealtimeKitSignature(
-            rawBody,
-            signatureString,
-            "https://example.com/public-key"
-        );
-        expect(result).toBe(true);
+      result = await verifyRealtimeKitSignature(
+        rawBody,
+        signatureString,
+        "https://example.com/public-key",
+      );
+      expect(result).toBe(true);
     }
     const end = performance.now();
 
-    console.log(`[Benchmark] Baseline (unoptimized): ${(end - start).toFixed(2)}ms for ${String(iterations)} iterations`);
+    console.log(
+      `[Benchmark] Baseline (unoptimized): ${(end - start).toFixed(2)}ms for ${String(iterations)} iterations`,
+    );
     console.log(`[Benchmark] Fetch called ${String(fetchCallCount)} times`);
   });
 });
