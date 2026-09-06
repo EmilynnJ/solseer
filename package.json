@@ -21,7 +21,6 @@
     "cf:types": "npm run cf:types -w @soulseer/worker"
   },
   "devDependencies": {
-    "@types/dompurify": "^3.0.5",
     "concurrently": "latest",
     "typescript": "latest"
   },
