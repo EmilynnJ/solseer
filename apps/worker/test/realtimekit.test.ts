@@ -284,11 +284,11 @@ describe("RealtimeKit webhook signature verification", () => {
     const spkiBase64 = btoa(String.fromCharCode(...new Uint8Array(spkiBuffer)));
     const mockPublicKey = `-----BEGIN PUBLIC KEY-----\n${spkiBase64}\n-----END PUBLIC KEY-----`;
 
-    const fetchMock = vi.fn().mockImplementation(async () => {
-      return new Response(JSON.stringify({
+    const fetchMock = vi.fn().mockImplementation(() => {
+      return Promise.resolve(new Response(JSON.stringify({
         success: true,
         data: { publicKey: mockPublicKey }
-      }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }), { status: 200, headers: { "Content-Type": "application/json" } }));
     });
     vi.stubGlobal("fetch", fetchMock);
 
