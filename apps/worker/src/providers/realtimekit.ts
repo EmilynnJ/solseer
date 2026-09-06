@@ -179,20 +179,28 @@ function normalizedPresetName(value: string): string {
   return value.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-");
 }
 
+type PresetData = {
+  original: string;
+  normalized: string;
+};
+
+// Optimizes array.find string normalizations by pre-calculating normalized values
 function findPreset(
-  names: string[],
+  presets: PresetData[],
   preferred: string,
   role: "host" | "participant",
 ): string | undefined {
-  const exact = names.find(
-    (name) => normalizedPresetName(name) === normalizedPresetName(preferred),
+  const preferredNormalized = normalizedPresetName(preferred);
+  const exact = presets.find(
+    (preset) => preset.normalized === preferredNormalized,
   );
-  if (exact) return exact;
+  if (exact) return exact.original;
   return (
-    names.find((name) => {
-      const normalized = normalizedPresetName(name);
-      return normalized.includes(role) && normalized.includes("group");
-    }) ?? names.find((name) => normalizedPresetName(name).includes(role))
+    presets.find(
+      (preset) =>
+        preset.normalized.includes(role) && preset.normalized.includes("group"),
+    )?.original ??
+    presets.find((preset) => preset.normalized.includes(role))?.original
   );
 }
 
@@ -206,8 +214,13 @@ export function selectParticipantPresets(names: string[]): {
     ]);
   }
 
-  const reader = findPreset(names, "soulseer-reader", "host");
-  const client = findPreset(names, "soulseer-client", "participant");
+  const presets = names.map((name) => ({
+    original: name,
+    normalized: normalizedPresetName(name),
+  }));
+
+  const reader = findPreset(presets, "soulseer-reader", "host");
+  const client = findPreset(presets, "soulseer-client", "participant");
   if (!reader || !client) {
     throw new RealtimeKitProviderError("presets", 200, [
       "role_presets_not_found",
@@ -383,4 +396,3 @@ export async function verifyRealtimeKitSignature(
     rawBody,
   );
 }
-
