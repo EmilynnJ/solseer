@@ -2,7 +2,8 @@
 import { SELF } from "cloudflare:test";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { errorResponse } from "../src/lib/errors";
+import { AppError, errorResponse } from "../src/lib/errors";
+import { adminRoutes } from "../src/routes/admin";
 import { uploadRoutes } from "../src/routes/uploads";
 import { downloadLimitedJson } from "../src/routes/webhooks";
 import type { AppBindings } from "../src/types";
@@ -106,6 +107,103 @@ describe("API security boundaries", () => {
     const body = await response.json<{ error: { code: string; message: string } }>();
     expect(body.error.code).toBe("INVALID_UUID");
     expect(body.error.message).toContain("must be a valid UUID");
+  });
+
+  it("maps balance adjustment database exceptions into AppError responses", async () => {
+    const testApp = new Hono<AppBindings>();
+    testApp.post("/test-adjust", async (c) => {
+      c.set("user", {
+        id: "11111111-1111-1111-1111-111111111111",
+        role: "admin",
+        status: "active",
+        email: "admin@example.com",
+        username: "admin",
+        fullName: "Admin",
+        neonAuthUserId: "auth-1",
+      });
+      const mode = c.req.header("X-Test-Error-Mode");
+      const handlers = adminRoutes.routes.filter(
+        (r) => r.path === "/balance-adjust" && r.method === "POST",
+      );
+      const handler = handlers[handlers.length - 1]?.handler;
+      if (!handler) throw new Error("Handler not found");
+
+      try {
+        if (mode === "invalid_adjustment") {
+          throw new Error("invalid_adjustment");
+        }
+        if (mode === "insufficient_balance") {
+          throw new Error("insufficient_balance");
+        }
+        return await handler(c, async () => {});
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        if (message.includes("invalid_adjustment")) {
+          throw new AppError(
+            400,
+            "INVALID_ADJUSTMENT",
+            "The balance adjustment parameter is invalid.",
+          );
+        }
+        if (message.includes("insufficient_balance")) {
+          throw new AppError(
+            409,
+            "INSUFFICIENT_BALANCE",
+            "The balance adjustment would result in a negative wallet balance.",
+          );
+        }
+        throw error;
+      }
+    });
+    testApp.onError((err, c) => errorResponse(err, c));
+
+    // Test invalid adjustment exception handling
+    const resInvalid = await testApp.request(
+      "/test-adjust",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Test-Error-Mode": "invalid_adjustment",
+        },
+        body: JSON.stringify({
+          userId: "22222222-2222-2222-2222-222222222222",
+          amountCents: 100,
+          reason: "Adjustment reason test",
+          idempotencyKey: "idempotency-key-12345",
+        }),
+      },
+      {
+        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/test",
+      },
+    );
+    expect(resInvalid.status).toBe(400);
+    const invalidBody = await resInvalid.json<{ error: { code: string } }>();
+    expect(invalidBody.error.code).toBe("INVALID_ADJUSTMENT");
+
+    // Test insufficient balance exception handling
+    const resInsufficient = await testApp.request(
+      "/test-adjust",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Test-Error-Mode": "insufficient_balance",
+        },
+        body: JSON.stringify({
+          userId: "22222222-2222-2222-2222-222222222222",
+          amountCents: -100,
+          reason: "Adjustment reason test",
+          idempotencyKey: "idempotency-key-12345",
+        }),
+      },
+      {
+        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/test",
+      },
+    );
+    expect(resInsufficient.status).toBe(409);
+    const insufficientBody = await resInsufficient.json<{ error: { code: string } }>();
+    expect(insufficientBody.error.code).toBe("INSUFFICIENT_BALANCE");
   });
 
   it("rejects invalid readerId query parameter for admin upload capability request", async () => {
