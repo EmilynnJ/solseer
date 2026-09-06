@@ -46,15 +46,22 @@ export function MessagesPage() {
     return result.conversations;
   }, []);
 
-  const loadThread = useCallback(async (conversationId: string) => {
-    const result = await api<ThreadResponse>(
-      `/messages/conversations/${conversationId}`,
-    );
-    setThread(result);
-    await api(`/messages/conversations/${conversationId}/read`, {
-      method: "POST",
-    });
-  }, []);
+  // ⚡ Bolt: Added optional `markRead` flag (defaults to true) so background polling
+  // can re-fetch thread data without triggering redundant POST /read mutation write queries.
+  const loadThread = useCallback(
+    async (conversationId: string, markRead = true) => {
+      const result = await api<ThreadResponse>(
+        `/messages/conversations/${conversationId}`,
+      );
+      setThread(result);
+      if (markRead) {
+        await api(`/messages/conversations/${conversationId}/read`, {
+          method: "POST",
+        });
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     void (async () => {
@@ -85,9 +92,10 @@ export function MessagesPage() {
   useEffect(() => {
     if (!selectedId) return;
     const timer = window.setInterval(() => {
-      void Promise.all([loadConversations(), loadThread(selectedId)]).catch(
-        () => undefined,
-      );
+      void Promise.all([
+        loadConversations(),
+        loadThread(selectedId, false),
+      ]).catch(() => undefined);
     }, 10_000);
     return () => {
       window.clearInterval(timer);
