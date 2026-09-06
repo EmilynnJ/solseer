@@ -258,3 +258,60 @@ describe("RealtimeKit Preflight and Initial Connection ID relaxation", () => {
   });
 });
 
+describe("RealtimeKit webhook signature verification", () => {
+  it("caches the imported public key to avoid repeated fetches and imports", async () => {
+    // Generate a valid signature/key pair for testing
+    const keyPair = await crypto.subtle.generateKey(
+      {
+        name: "RSASSA-PKCS1-v1_5",
+        modulusLength: 2048,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: "SHA-256",
+      },
+      true,
+      ["sign", "verify"]
+    );
+
+    const rawBody = new TextEncoder().encode("test payload");
+    const signature = await crypto.subtle.sign(
+      "RSASSA-PKCS1-v1_5",
+      keyPair.privateKey,
+      rawBody
+    );
+    const signatureString = btoa(String.fromCharCode(...new Uint8Array(signature)));
+
+    const spkiBuffer = await crypto.subtle.exportKey("spki", keyPair.publicKey);
+    const spkiBase64 = btoa(String.fromCharCode(...new Uint8Array(spkiBuffer)));
+    const mockPublicKey = `-----BEGIN PUBLIC KEY-----\n${spkiBase64}\n-----END PUBLIC KEY-----`;
+
+    const fetchMock = vi.fn().mockImplementation(async () => {
+      return new Response(JSON.stringify({
+        success: true,
+        data: { publicKey: mockPublicKey }
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    // Dynamic import to isolate module state if needed, though in Vitest
+    // afterEach(vi.unstubAllGlobals) and describe blocks we just call it.
+    const { verifyRealtimeKitSignature } = await import("../src/providers/realtimekit");
+
+    const url = "https://example.com/webhook-key";
+
+    // First call fetches and imports
+    const result1 = await verifyRealtimeKitSignature(rawBody, signatureString, url);
+    expect(result1).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Second call should use cache
+    const result2 = await verifyRealtimeKitSignature(rawBody, signatureString, url);
+    expect(result2).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1); // Still 1
+
+    // Call with different URL should fetch again
+    const result3 = await verifyRealtimeKitSignature(rawBody, signatureString, "https://example.com/different-key");
+    expect(result3).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
