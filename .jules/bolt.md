@@ -1,3 +1,7 @@
 ## 2026-09-01 - Prevent Memory Bloat in Drizzle Pagination with Correlated Subqueries
 **Learning:** Using `LEFT JOIN` and `GROUP BY` to count related records (e.g., counting comments for posts, or reviews for readers) causes significant memory bloat and performance degradation during pagination due to the database returning a row for every joined record before grouping them.
 **Action:** Replace the `LEFT JOIN` + `GROUP BY` pattern with a correlated subquery using `sql<number>'(select count(*)::int from child_table where parentId = ${parent_table.id})'` to significantly improve query performance and reduce memory usage in Drizzle ORM/PostgreSQL.
+
+## 2026-09-06 - Separate Read Fetches from Mutation Writes in Background Polling
+**Learning:** Background polling effects in React components that fetch current state (e.g., fetching active thread messages every 10s) can inadvertently execute database write mutations (such as marking conversations as read) on every tick if the fetch helper bundles write mutations by default.
+**Action:** Parameterize data-fetching functions with an optional flag (e.g. `markRead = true`) so background polling effects can pass `false` to safely re-fetch data without dispatching redundant mutation write requests to the server.
