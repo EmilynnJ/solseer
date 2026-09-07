@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-deprecated -- SELF remains the typed fetch binding in this test configuration. */
 import { SELF } from "cloudflare:test";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { errorResponse } from "../src/lib/errors";
 import { uploadRoutes } from "../src/routes/uploads";
 import { downloadLimitedJson } from "../src/routes/webhooks";
@@ -20,6 +20,24 @@ describe("API security boundaries", () => {
     await expect(
       downloadLimitedJson("https://attacker.cloudflare.com.evil.com/chat.json", 1000),
     ).rejects.toThrow("Chat download URL domain is not allowed.");
+  });
+
+  it("sets redirect option to error when executing chat download fetch (SSRF redirect prevention)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ test: "data" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json", "Content-Length": "15" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await downloadLimitedJson("https://cloudflare.com/chat.json", 1000);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.redirect).toBe("error");
+
+    vi.unstubAllGlobals();
   });
   it("rejects an unapproved browser origin", async () => {
     const response = await SELF.fetch("https://api.example.test/api/health", {
