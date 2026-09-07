@@ -7,3 +7,8 @@
 **Vulnerability:** External webhook payloads from RealtimeKit failed Zod validation with 400 Bad Request if the `participant.customParticipantId` field was omitted or contained non-UUID string identifiers, causing webhook processing to fail and state updates in DurableObjects to be missed.
 **Learning:** External provider webhook schemas should strictly enforce structure without over-constraining optional or provider-controlled vendor identifiers as mandatory strict UUIDs.
 **Prevention:** Validate external webhook participant IDs as flexible optional strings (`z.string().min(1).optional()`) so webhook delivery remains resilient while maintaining payload type safety.
+## 2026-09-06 - Unsafe HTML Rendering in policy.tsx
+
+**Vulnerability:** The `policy.tsx` component used `dangerouslySetInnerHTML={{ __html: html }}` to render HTML content from local files. While currently using local content, this pattern is generally unsafe as it leaves the application vulnerable to XSS if the content source is ever changed to include user input or untrusted API data.
+**Learning:** `dangerouslySetInnerHTML` should only be used when absolutely necessary and always with sanitized input.
+**Prevention:** Always use a sanitization library like `dompurify` when using `dangerouslySetInnerHTML`, even if the initial content seems safe, to prevent future vulnerabilities. Wrap the input like `DOMPurify.sanitize(html)`.
