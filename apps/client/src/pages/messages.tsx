@@ -46,15 +46,22 @@ export function MessagesPage() {
     return result.conversations;
   }, []);
 
-  const loadThread = useCallback(async (conversationId: string) => {
-    const result = await api<ThreadResponse>(
-      `/messages/conversations/${conversationId}`,
-    );
-    setThread(result);
-    await api(`/messages/conversations/${conversationId}/read`, {
-      method: "POST",
-    });
-  }, []);
+  // ⚡ Bolt: Avoid sending redundant POST /read mutation write queries during
+  // background polling. Only send markRead when opening a thread or explicitly requested.
+  const loadThread = useCallback(
+    async (conversationId: string, markRead = true) => {
+      const result = await api<ThreadResponse>(
+        `/messages/conversations/${conversationId}`,
+      );
+      setThread(result);
+      if (markRead) {
+        await api(`/messages/conversations/${conversationId}/read`, {
+          method: "POST",
+        });
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     void (async () => {
@@ -85,9 +92,12 @@ export function MessagesPage() {
   useEffect(() => {
     if (!selectedId) return;
     const timer = window.setInterval(() => {
-      void Promise.all([loadConversations(), loadThread(selectedId)]).catch(
-        () => undefined,
-      );
+      // ⚡ Bolt: Pass markRead = false during interval polling to fetch updates
+      // without firing unnecessary POST /read write queries to the database every 10 seconds.
+      void Promise.all([
+        loadConversations(),
+        loadThread(selectedId, false),
+      ]).catch(() => undefined);
     }, 10_000);
     return () => {
       window.clearInterval(timer);
