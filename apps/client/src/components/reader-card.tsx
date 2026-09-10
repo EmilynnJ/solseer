@@ -1,10 +1,17 @@
+import { memo } from "react";
 import { Link } from "react-router-dom";
 import { MessageCircle, Mic, Video } from "lucide-react";
 import type { Reader } from "../types";
 import { API_ORIGIN, money } from "../lib/api";
 import { Stars } from "./ui";
 
-export function ReaderCard({ reader }: { reader: Reader }) {
+// ⚡ Bolt: Wrapped ReaderCard in React.memo() to prevent unnecessary re-renders in list views.
+// This significantly reduces DOM update overhead when the parent component state changes.
+export const ReaderCard = memo(function ReaderCard({
+  reader,
+}: {
+  reader: Reader;
+}) {
   return (
     <article className="reader-card reveal">
       <Link to={`/readers/${reader.id}`} className="reader-portrait-wrap">
@@ -13,6 +20,7 @@ export function ReaderCard({ reader }: { reader: Reader }) {
             className="reader-portrait"
             src={`${API_ORIGIN}/api/readers/${reader.id}/image`}
             alt={`${reader.fullName}, SoulSeer Reader`}
+            loading="lazy" // ⚡ Bolt: Added lazy loading to defer offscreen image fetching, saving bandwidth.
           />
         ) : (
           <div className="reader-portrait fallback" aria-hidden="true">
@@ -50,4 +58,4 @@ export function ReaderCard({ reader }: { reader: Reader }) {
       </div>
     </article>
   );
-}
+});
