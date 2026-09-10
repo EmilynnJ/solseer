@@ -138,6 +138,7 @@ dist
 
 # pnpm
 .pnpm-store
+.wrangler/
 
 # yarn v3
 .pnp.*
