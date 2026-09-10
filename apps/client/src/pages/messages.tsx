@@ -253,6 +253,7 @@ export function MessagesPage() {
             <button
               className="icon-button"
               aria-label="Refresh conversations"
+              title="Refresh conversations"
               onClick={() => void loadConversations()}
             >
               <RefreshCw size={17} />
