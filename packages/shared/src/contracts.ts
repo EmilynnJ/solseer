@@ -185,7 +185,7 @@ export const realtimeKitEventSchema = z.object({
 });
 
 export const paginationSchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
+  page: z.coerce.number().int().min(1).max(10_000).default(1),
 });
 
 export type AuthenticatedUser = {
