@@ -290,6 +290,7 @@ export function LoginPage() {
                   <button
                     type="button"
                     aria-label={show ? "Hide password" : "Show password"}
+                    title={show ? "Hide password" : "Show password"}
                     onClick={() => setShow(!show)}
                   >
                     {show ? <EyeOff /> : <Eye />}
