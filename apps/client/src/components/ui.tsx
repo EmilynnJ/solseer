@@ -80,11 +80,18 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        onMouseDown={(event) => event.stopPropagation()}
+        onMouseDown={(event) => {
+          event.stopPropagation();
+        }}
       >
         <div className="modal-head">
           <h2 id="modal-title">{title}</h2>
-          <button className="icon-button" aria-label="Close" onClick={onClose}>
+          <button
+            className="icon-button"
+            aria-label="Close"
+            title="Close"
+            onClick={onClose}
+          >
             ×
           </button>
         </div>
