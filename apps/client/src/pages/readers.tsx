@@ -25,6 +25,12 @@ export function ReadersPage() {
   const filtered = useMemo(
     () =>
       readers.data?.readers.filter((reader) => {
+        // Performance optimization: evaluate cheap boolean and string checks first
+        // to short-circuit before executing price comparison logic.
+        if (online && !reader.isOnline) return false;
+        if (specialty !== "all" && !reader.specialties.includes(specialty))
+          return false;
+
         const price =
           type === "chat"
             ? reader.pricingChat
@@ -37,11 +43,7 @@ export function ReadersPage() {
                     reader.pricingVoice,
                     reader.pricingVideo,
                   );
-        return (
-          (!online || reader.isOnline) &&
-          (specialty === "all" || reader.specialties.includes(specialty)) &&
-          price <= maxPrice
-        );
+        return price <= maxPrice;
       }) ?? [],
     [maxPrice, online, readers.data, specialty, type],
   );
