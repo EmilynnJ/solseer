@@ -300,7 +300,12 @@ function PostThread({
             {dateTime(thread.data.post.createdAt)}
           </small>
           {canReply && (
-            <button className="flag-link" onClick={() => void flag()}>
+            <button
+              className="flag-link"
+              aria-label="Flag post"
+              title="Flag post"
+              onClick={() => void flag()}
+            >
               <Flag /> Flag
             </button>
           )}
@@ -322,7 +327,13 @@ function PostThread({
                     >
                       Reply
                     </button>
-                    <button onClick={() => void flag(comment.id)}>Flag</button>
+                    <button
+                      aria-label="Flag comment"
+                      title="Flag comment"
+                      onClick={() => void flag(comment.id)}
+                    >
+                      Flag
+                    </button>
                   </div>
                 )}
               </article>
