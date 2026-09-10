@@ -1,10 +1,16 @@
+import { memo } from "react";
 import { Link } from "react-router-dom";
 import { MessageCircle, Mic, Video } from "lucide-react";
 import type { Reader } from "../types";
 import { API_ORIGIN, money } from "../lib/api";
 import { Stars } from "./ui";
 
-export function ReaderCard({ reader }: { reader: Reader }) {
+/**
+ * ReaderCard component memoized with React.memo to prevent unnecessary re-renders
+ * during filtering or state updates in parent list components. Profile images
+ * use lazy loading and async decoding to optimize initial page load performance.
+ */
+export const ReaderCard = memo(function ReaderCard({ reader }: { reader: Reader }) {
   return (
     <article className="reader-card reveal">
       <Link to={`/readers/${reader.id}`} className="reader-portrait-wrap">
@@ -13,6 +19,8 @@ export function ReaderCard({ reader }: { reader: Reader }) {
             className="reader-portrait"
             src={`${API_ORIGIN}/api/readers/${reader.id}/image`}
             alt={`${reader.fullName}, SoulSeer Reader`}
+            loading="lazy"
+            decoding="async"
           />
         ) : (
           <div className="reader-portrait fallback" aria-hidden="true">
@@ -28,7 +36,7 @@ export function ReaderCard({ reader }: { reader: Reader }) {
         <h3>
           <Link to={`/readers/${reader.id}`}>{reader.fullName}</Link>
         </h3>
-        <Stars value={Number(reader.rating)} count={reader.reviewCount} />
+        <Stars value={reader.rating} count={reader.reviewCount} />
         <p className="reader-bio">{reader.bio}</p>
         <div className="rate-row">
           <span>
@@ -50,4 +58,4 @@ export function ReaderCard({ reader }: { reader: Reader }) {
       </div>
     </article>
   );
-}
+});
