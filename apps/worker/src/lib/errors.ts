@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { ZodError } from "zod";
+import { z, ZodError } from "zod";
 import { logger } from "./log";
 
 export class AppError extends Error {
@@ -25,7 +25,7 @@ export function errorResponse(error: unknown, context: Context): Response {
             400,
             "VALIDATION_ERROR",
             "The request contains invalid fields.",
-            error.flatten(),
+            z.treeifyError(error),
           )
         : new AppError(
             500,
