@@ -15,16 +15,21 @@ export function ReadersPage() {
   const [type, setType] = useState("all");
   const [specialty, setSpecialty] = useState("all");
   const [maxPrice, setMaxPrice] = useState(10000);
+  // ⚡ Bolt: Collect unique specialties with Array.from(Set) to avoid redundant array allocations
   const specialties = useMemo(
     () =>
-      [
-        ...new Set(readers.data?.readers.flatMap((r) => r.specialties) ?? []),
-      ].sort(),
+      Array.from(
+        new Set(readers.data?.readers.flatMap((r) => r.specialties) ?? []),
+      ).sort(),
     [readers.data],
   );
+  // ⚡ Bolt: Evaluate inexpensive boolean and specialty conditions early before price calculations
   const filtered = useMemo(
     () =>
       readers.data?.readers.filter((reader) => {
+        if (online && !reader.isOnline) return false;
+        if (specialty !== "all" && !reader.specialties.includes(specialty))
+          return false;
         const price =
           type === "chat"
             ? reader.pricingChat
@@ -37,11 +42,7 @@ export function ReadersPage() {
                     reader.pricingVoice,
                     reader.pricingVideo,
                   );
-        return (
-          (!online || reader.isOnline) &&
-          (specialty === "all" || reader.specialties.includes(specialty)) &&
-          price <= maxPrice
-        );
+        return price <= maxPrice;
       }) ?? [],
     [maxPrice, online, readers.data, specialty, type],
   );
@@ -64,7 +65,9 @@ export function ReadersPage() {
           Specialty
           <select
             value={specialty}
-            onChange={(e) => setSpecialty(e.target.value)}
+            onChange={(e) => {
+              setSpecialty(e.target.value);
+            }}
           >
             <option value="all">All specialties</option>
             {specialties.map((item) => (
@@ -74,7 +77,12 @@ export function ReadersPage() {
         </label>
         <label>
           Reading type
-          <select value={type} onChange={(e) => setType(e.target.value)}>
+          <select
+            value={type}
+            onChange={(e) => {
+              setType(e.target.value);
+            }}
+          >
             <option value="all">Any type</option>
             <option value="chat">Chat</option>
             <option value="voice">Voice</option>
@@ -85,7 +93,9 @@ export function ReadersPage() {
           Maximum rate
           <select
             value={maxPrice}
-            onChange={(e) => setMaxPrice(Number(e.target.value))}
+            onChange={(e) => {
+              setMaxPrice(Number(e.target.value));
+            }}
           >
             <option value="500">$5 / min</option>
             <option value="1000">$10 / min</option>
@@ -97,7 +107,9 @@ export function ReadersPage() {
           <input
             type="checkbox"
             checked={online}
-            onChange={(e) => setOnline(e.target.checked)}
+            onChange={(e) => {
+              setOnline(e.target.checked);
+            }}
           />{" "}
           Available now
         </label>
