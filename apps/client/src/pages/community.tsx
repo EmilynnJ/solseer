@@ -51,7 +51,10 @@ export function CommunityPage() {
       </PageIntro>
       <section className="community-links">
         <a
-          href={import.meta.env.VITE_FACEBOOK_GROUP_URL || "https://www.facebook.com"}
+          href={
+            import.meta.env.VITE_FACEBOOK_GROUP_URL ||
+            "https://www.facebook.com"
+          }
           target="_blank"
           rel="noreferrer"
         >
@@ -64,7 +67,9 @@ export function CommunityPage() {
           </div>
         </a>
         <a
-          href={import.meta.env.VITE_DISCORD_INVITE_URL || "https://discord.com"}
+          href={
+            import.meta.env.VITE_DISCORD_INVITE_URL || "https://discord.com"
+          }
           target="_blank"
           rel="noreferrer"
         >
@@ -89,56 +94,12 @@ export function CommunityPage() {
             </Button>
           )}
         </div>
-        {posts.loading ? (
-          <Loading />
-        ) : posts.error ? (
-          <Notice tone="error">{posts.error}</Notice>
-        ) : posts.data?.posts.length ? (
-          <div className="post-list">
-            {posts.data.posts.map((post) => (
-              <button
-                key={post.id}
-                className="post-row"
-                onClick={() => setSelected(post.id)}
-              >
-                <span className="category">{labels[post.category]}</span>
-                <div>
-                  <h3>
-                    {post.title} {post.isLocked && <Lock size={14} />}
-                  </h3>
-                  <p>{post.body}</p>
-                  <small>
-                    By {post.authorName} · {dateTime(post.createdAt)}
-                  </small>
-                </div>
-                <span className="comment-count">
-                  <MessagesSquare /> {post.commentCount}
-                </span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <Empty title="Be the first to begin a conversation">
-            A thoughtful question can open a door for the whole community.
-          </Empty>
-        )}
-        <div className="pagination">
-          <Button
-            className="secondary"
-            disabled={page === 1}
-            onClick={() => setPage((p) => p - 1)}
-          >
-            Previous
-          </Button>
-          <span>Page {page}</span>
-          <Button
-            className="secondary"
-            disabled={(posts.data?.posts.length ?? 0) < 10}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            Next
-          </Button>
-        </div>
+        <PostList
+          posts={posts}
+          page={page}
+          setPage={setPage}
+          setSelected={setSelected}
+        />
       </section>
       {composer && (
         <PostComposer
@@ -369,5 +330,72 @@ function PostThread({
         </div>
       )}
     </Modal>
+  );
+}
+
+function PostList({
+  posts,
+  page,
+  setPage,
+  setSelected,
+}: {
+  posts: ReturnType<typeof useApiData<{ posts: ForumPost[] }>>;
+  page: number;
+  setPage: React.Dispatch<React.SetStateAction<number>>;
+  setSelected: (id: string) => void;
+}) {
+  return (
+    <>
+      {posts.loading ? (
+        <Loading />
+      ) : posts.error ? (
+        <Notice tone="error">{posts.error}</Notice>
+      ) : posts.data?.posts.length ? (
+        <div className="post-list">
+          {posts.data.posts.map((post) => (
+            <button
+              key={post.id}
+              className="post-row"
+              onClick={() => setSelected(post.id)}
+            >
+              <span className="category">{labels[post.category]}</span>
+              <div>
+                <h3>
+                  {post.title} {post.isLocked && <Lock size={14} />}
+                </h3>
+                <p>{post.body}</p>
+                <small>
+                  By {post.authorName} · {dateTime(post.createdAt)}
+                </small>
+              </div>
+              <span className="comment-count">
+                <MessagesSquare /> {post.commentCount}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <Empty title="Be the first to begin a conversation">
+          A thoughtful question can open a door for the whole community.
+        </Empty>
+      )}
+      <div className="pagination">
+        <Button
+          className="secondary"
+          disabled={page === 1}
+          onClick={() => setPage((p) => p - 1)}
+        >
+          Previous
+        </Button>
+        <span>Page {page}</span>
+        <Button
+          className="secondary"
+          disabled={(posts.data?.posts.length ?? 0) < 10}
+          onClick={() => setPage((p) => p + 1)}
+        >
+          Next
+        </Button>
+      </div>
+    </>
   );
 }
