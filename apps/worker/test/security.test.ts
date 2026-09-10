@@ -3,8 +3,11 @@ import { SELF } from "cloudflare:test";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { errorResponse } from "../src/lib/errors";
+import { adminRoutes } from "../src/routes/admin";
 import { uploadRoutes } from "../src/routes/uploads";
 import { downloadLimitedJson } from "../src/routes/webhooks";
+import * as dbModule from "../src/lib/db";
+import type { Database, NeonSql } from "../src/lib/db";
 import type { AppBindings } from "../src/types";
 
 describe("API security boundaries", () => {
@@ -168,5 +171,81 @@ describe("API security boundaries", () => {
     const body = await res.json<{ error: { code: string; message: string } }>();
     expect(body.error.code).toBe("INVALID_UUID");
     expect(body.error.message).toContain("readerId");
+  });
+
+  it("maps Postgres adjust_wallet_balance exceptions to 400 Bad Request and 409 Conflict", async () => {
+    const testApp = new Hono<AppBindings>();
+    testApp.post("/test-adjust", async (c) => {
+      c.set("user", {
+        id: "11111111-1111-1111-1111-111111111111",
+        role: "admin",
+        status: "active",
+        email: "admin@example.com",
+        username: "admin",
+        fullName: "Admin",
+        neonAuthUserId: "auth-1",
+      });
+      const handlers = adminRoutes.routes.filter(
+        (r) => r.path === "/balance-adjust" && r.method === "POST",
+      );
+      const adjustHandler = handlers[handlers.length - 1]?.handler;
+      if (!adjustHandler) throw new Error("Handler not found");
+      return adjustHandler(c, async () => {});
+    });
+    testApp.onError((err, c) => errorResponse(err, c));
+
+    vi.spyOn(dbModule, "createDatabase").mockImplementationOnce(() => {
+      const mockSql = (() => {
+        throw new Error("P0001: invalid_adjustment");
+      }) as unknown as NeonSql;
+      return { db: {} as Database, sql: mockSql };
+    });
+
+    const res1 = await testApp.request(
+      "/test-adjust",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: "22222222-2222-4222-8222-222222222222",
+          amountCents: 1000,
+          reason: "Adjustment test reason",
+          idempotencyKey: "key-12345678",
+        }),
+      },
+      { DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/test" },
+    );
+
+    expect(res1.status).toBe(400);
+    const body1 = await res1.json<{ error: { code: string; message: string } }>();
+    expect(body1.error.code).toBe("INVALID_ADJUSTMENT");
+
+    vi.spyOn(dbModule, "createDatabase").mockImplementationOnce(() => {
+      const mockSql = (() => {
+        throw new Error("P0001: insufficient_balance");
+      }) as unknown as NeonSql;
+      return { db: {} as Database, sql: mockSql };
+    });
+
+    const res2 = await testApp.request(
+      "/test-adjust",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: "22222222-2222-4222-8222-222222222222",
+          amountCents: -5000,
+          reason: "Adjustment test reason",
+          idempotencyKey: "key-12345679",
+        }),
+      },
+      { DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/test" },
+    );
+
+    expect(res2.status).toBe(409);
+    const body2 = await res2.json<{ error: { code: string; message: string } }>();
+    expect(body2.error.code).toBe("INSUFFICIENT_BALANCE");
+
+    vi.restoreAllMocks();
   });
 });
