@@ -253,6 +253,7 @@ export function MessagesPage() {
             <button
               className="icon-button"
               aria-label="Refresh conversations"
+              title="Refresh conversations"
               onClick={() => void loadConversations()}
             >
               <RefreshCw size={17} />
@@ -432,6 +433,7 @@ export function MessagesPage() {
               <h2>Start your conversation</h2>
               <p>Your message to this Reader is always free.</p>
               <textarea
+                aria-label="What would you like guidance about?"
                 required
                 maxLength={8000}
                 rows={6}
