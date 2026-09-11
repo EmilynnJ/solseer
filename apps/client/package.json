@@ -17,7 +17,7 @@
     "@fontsource/manrope": "*",
     "@fontsource/playfair-display": "*",
     "@neondatabase/neon-js": "^0.7.0-beta",
-    "@soulseer/shared": "workspace:*",
+    "@soulseer/shared": "*",
     "@stripe/react-stripe-js": "*",
     "@stripe/stripe-js": "*",
     "@vercel/analytics": "^2.0.1",

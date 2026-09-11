@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "*",
-    "@soulseer/shared": "workspace:*",
+    "@soulseer/shared": "*",
     "drizzle-orm": "*",
     "hono": "^4.13.0",
     "jose": "*",

@@ -22,13 +22,7 @@
   },
   "devDependencies": {
     "concurrently": "latest",
-    "typescript": "^5.8.2"
-  },
-  "pnpm": {
-    "overrides": {
-      "typescript": "^5.8.2",
-      "vitest": "^4.1.0"
-    }
+    "typescript": "latest"
   },
   "engines": {
     "node": ">=22"
