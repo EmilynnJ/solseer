@@ -98,8 +98,12 @@ export function HomePage() {
           </Empty>
         ) : readers.data?.readers.length ? (
           <div className="reader-grid">
-            {readers.data.readers.map((reader) => (
-              <ReaderCard key={reader.id} reader={reader} />
+            {readers.data.readers.map((reader, index) => (
+              <ReaderCard
+                key={reader.id}
+                reader={reader}
+                lazyLoadImage={index > 3}
+              />
             ))}
           </div>
         ) : (
