@@ -13,6 +13,8 @@ export function ReaderCard({ reader }: { reader: Reader }) {
             className="reader-portrait"
             src={`${API_ORIGIN}/api/readers/${reader.id}/image`}
             alt={`${reader.fullName}, SoulSeer Reader`}
+            /* ⚡ Bolt: Lazy load reader images to prevent unnecessary loading below the fold, saving bandwidth and improving initial page load. */
+            loading="lazy"
           />
         ) : (
           <div className="reader-portrait fallback" aria-hidden="true">
