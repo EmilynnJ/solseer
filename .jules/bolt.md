@@ -1,3 +1,3 @@
-## 2026-09-01 - Prevent Memory Bloat in Drizzle Pagination with Correlated Subqueries
-**Learning:** Using `LEFT JOIN` and `GROUP BY` to count related records (e.g., counting comments for posts, or reviews for readers) causes significant memory bloat and performance degradation during pagination due to the database returning a row for every joined record before grouping them.
-**Action:** Replace the `LEFT JOIN` + `GROUP BY` pattern with a correlated subquery using `sql<number>'(select count(*)::int from child_table where parentId = ${parent_table.id})'` to significantly improve query performance and reduce memory usage in Drizzle ORM/PostgreSQL.
+## 2026-09-14 - [React Component Optimization]
+**Learning:** [React components nested in large grids or lists (like ReaderCard) that take complex props often cause unnecessary re-renders in the parent. Memoizing the component explicitly blocks cascading renders. In parallel, lazy loading off-screen images within these list item components dramatically decreases initial page resource usage without compromising the LCP of hero/above-the-fold content.]
+**Action:** [Use `React.memo` combined with `loading="lazy"` for repeating list items containing below-the-fold assets, and properly comment the reason inside the code to assist future maintainers.]
