@@ -383,17 +383,21 @@ function SessionSummary({
             <form className="rating-form" onSubmit={submit}>
               <h2>How did this reading feel?</h2>
               <div className="rating-buttons" aria-label="Rating">
-                {[1, 2, 3, 4, 5].map((value) => (
-                  <button
-                    type="button"
-                    aria-label={`${value} stars`}
-                    className={value <= rating ? "active" : ""}
-                    onClick={() => setRating(value)}
-                    key={value}
-                  >
-                    <Star fill="currentColor" />
-                  </button>
-                ))}
+                {[1, 2, 3, 4, 5].map((value) => {
+                  const label = `${value} ${value === 1 ? "star" : "stars"}`;
+                  return (
+                    <button
+                      type="button"
+                      aria-label={label}
+                      title={label}
+                      className={value <= rating ? "active" : ""}
+                      onClick={() => setRating(value)}
+                      key={value}
+                    >
+                      <Star fill="currentColor" />
+                    </button>
+                  );
+                })}
               </div>
               <textarea
                 maxLength={2000}
