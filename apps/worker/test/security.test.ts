@@ -3,6 +3,8 @@ import { SELF } from "cloudflare:test";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { errorResponse } from "../src/lib/errors";
+import * as dbModule from "../src/lib/db";
+import { adminRoutes } from "../src/routes/admin";
 import { uploadRoutes } from "../src/routes/uploads";
 import { downloadLimitedJson } from "../src/routes/webhooks";
 import type { AppBindings } from "../src/types";
@@ -143,7 +145,7 @@ describe("API security boundaries", () => {
       );
       const uploadHandler = handlers[handlers.length - 1]?.handler;
       if (!uploadHandler) throw new Error("Handler not found");
-      return uploadHandler(c, async () => {});
+      return uploadHandler(c, () => Promise.resolve());
     });
     testApp.onError((err, c) => errorResponse(err, c));
 
@@ -168,5 +170,97 @@ describe("API security boundaries", () => {
     const body = await res.json<{ error: { code: string; message: string } }>();
     expect(body.error.code).toBe("INVALID_UUID");
     expect(body.error.message).toContain("readerId");
+  });
+
+  it("maps balance adjustment database exceptions to structured AppError responses", async () => {
+    const createDbSpy = vi
+      .spyOn(dbModule, "createDatabase")
+      .mockImplementation((url: string) => {
+        if (url === "test_invalid_adjustment") {
+          return {
+            db: {} as unknown as dbModule.Database,
+            sql: (() =>
+              Promise.reject(
+                new Error("invalid_adjustment error from postgres"),
+              )) as unknown as dbModule.NeonSql,
+          };
+        }
+        if (url === "test_insufficient_balance") {
+          return {
+            db: {} as unknown as dbModule.Database,
+            sql: (() =>
+              Promise.reject(
+                new Error("insufficient_balance error from postgres"),
+              )) as unknown as dbModule.NeonSql,
+          };
+        }
+        return dbModule.createDatabase(url);
+      });
+
+    const testApp = new Hono<AppBindings>();
+    testApp.post("/test-balance-adjust", (c) => {
+      c.set("user", {
+        id: "11111111-1111-4111-8111-111111111111",
+        role: "admin",
+        status: "active",
+        email: "admin@example.com",
+        username: "admin",
+        fullName: "Admin",
+        neonAuthUserId: "auth-1",
+      });
+      const handlers = adminRoutes.routes.filter(
+        (r) => r.path === "/balance-adjust" && r.method === "POST",
+      );
+      const handler = handlers[handlers.length - 1]?.handler;
+      if (!handler) throw new Error("Handler not found");
+      return handler(c, () => Promise.resolve());
+    });
+    testApp.onError((err, c) => errorResponse(err, c));
+
+    // Test invalid_adjustment error mapping
+    const invalidRes = await testApp.request(
+      "/test-balance-adjust",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: "22222222-2222-4222-8222-222222222222",
+          amountCents: 100,
+          reason: "Adjustment test reason",
+          idempotencyKey: "test-key-12345",
+        }),
+      },
+      {
+        DATABASE_URL: "test_invalid_adjustment",
+      },
+    );
+
+    expect(invalidRes.status).toBe(400);
+    const invalidBody = await invalidRes.json<{ error: { code: string } }>();
+    expect(invalidBody.error.code).toBe("INVALID_ADJUSTMENT");
+
+    // Test insufficient_balance error mapping
+    const insufficientRes = await testApp.request(
+      "/test-balance-adjust",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: "22222222-2222-4222-8222-222222222222",
+          amountCents: -500,
+          reason: "Adjustment test reason",
+          idempotencyKey: "test-key-67890",
+        }),
+      },
+      {
+        DATABASE_URL: "test_insufficient_balance",
+      },
+    );
+
+    expect(insufficientRes.status).toBe(409);
+    const insufficientBody = await insufficientRes.json<{ error: { code: string } }>();
+    expect(insufficientBody.error.code).toBe("INSUFFICIENT_BALANCE");
+
+    createDbSpy.mockRestore();
   });
 });
