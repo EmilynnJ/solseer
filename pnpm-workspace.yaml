@@ -1,7 +1,0 @@
-packages:
-  - "apps/*"
-  - "packages/*"
-link-workspace-packages: true
-
-overrides:
-  typescript: "5.9.3"
