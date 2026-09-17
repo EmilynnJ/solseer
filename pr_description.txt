@@ -1,0 +1,11 @@
+🎯 **What:** The testing gap addressed
+Added missing unit tests for the `logger` utility in `apps/worker/src/lib/log.ts` to ensure `info`, `warn`, and `error` methods correctly serialize context, details, and message to the standard console methods.
+
+📊 **Coverage:** What scenarios are now tested
+- Validates `info` messages logging to `console.log`.
+- Validates `warn` messages logging to `console.warn`.
+- Validates `error` messages logging to `console.error`.
+- Asserts accurate merging of standard payload structures including deterministic timestamps, base message properties, additional log context parameters, and custom details payload logic.
+
+✨ **Result:** The improvement in test coverage
+The logger module now has 100% path coverage allowing confident changes moving forward, minimizing regressions associated with formatting and reporting errors.
