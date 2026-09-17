@@ -3,6 +3,7 @@ import { SELF } from "cloudflare:test";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { errorResponse } from "../src/lib/errors";
+import { boundedJson } from "../src/lib/http";
 import { uploadRoutes } from "../src/routes/uploads";
 import { downloadLimitedJson } from "../src/routes/webhooks";
 import type { AppBindings } from "../src/types";
@@ -124,6 +125,25 @@ describe("API security boundaries", () => {
     const body = await response.json<{ error: { code: string; message: string } }>();
     expect(body.error.code).toBe("INVALID_UUID");
     expect(body.error.message).toContain("must be a valid UUID");
+  });
+
+  it("rejects oversized JSON payloads lacking Content-Length header", async () => {
+    const testApp = new Hono<AppBindings>();
+    testApp.use("/test-bounded", boundedJson(100));
+    testApp.post("/test-bounded", (c) => c.text("ok"));
+    testApp.onError((err, c) => errorResponse(err, c));
+
+    const largePayload = JSON.stringify({ data: "a".repeat(200) });
+    const req = new Request("https://api.example.test/test-bounded", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: largePayload,
+    });
+
+    const res = await testApp.request(req);
+    expect(res.status).toBe(413);
+    const body = await res.json<{ error: { code: string; message: string } }>();
+    expect(body.error.code).toBe("PAYLOAD_TOO_LARGE");
   });
 
   it("rejects invalid readerId query parameter for admin upload capability request", async () => {

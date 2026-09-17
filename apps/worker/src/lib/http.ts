@@ -99,13 +99,26 @@ export function boundedJson(maxBytes = 64 * 1024): MiddlewareHandler {
       return;
     }
     const rawLength = context.req.header("Content-Length");
-    const length = rawLength ? Number(rawLength) : 0;
-    if (!Number.isFinite(length) || length > maxBytes) {
-      throw new AppError(
-        413,
-        "PAYLOAD_TOO_LARGE",
-        "The request body is too large.",
-      );
+    if (rawLength !== undefined) {
+      const length = Number(rawLength);
+      if (!Number.isFinite(length) || length < 0 || length > maxBytes) {
+        throw new AppError(
+          413,
+          "PAYLOAD_TOO_LARGE",
+          "The request body is too large.",
+        );
+      }
+    }
+    if (context.req.raw.body) {
+      const cloned = context.req.raw.clone();
+      const buf = await cloned.arrayBuffer();
+      if (buf.byteLength > maxBytes) {
+        throw new AppError(
+          413,
+          "PAYLOAD_TOO_LARGE",
+          "The request body is too large.",
+        );
+      }
     }
     await next();
   };
