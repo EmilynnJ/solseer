@@ -1,0 +1,3 @@
+## 2025-05-18 - Decoupled Modal Focus & Icon Control Tooltips
+**Learning:** React Modal dialogs require decoupling initial focus management (`useEffect(..., [])`) from Escape key handling to prevent stealing focus from inner form inputs during parent re-renders. Furthermore, icon-only buttons need matching `title` attributes alongside `aria-label` to provide desktop native hover tooltips without compromising screen reader experience.
+**Action:** Always decouple mount-time focus onto `section[tabIndex=-1]` in modal components and ensure icon-only controls provide both `aria-label` and matching `title` attributes.
