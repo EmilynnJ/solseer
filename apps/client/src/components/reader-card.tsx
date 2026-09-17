@@ -4,7 +4,13 @@ import type { Reader } from "../types";
 import { API_ORIGIN, money } from "../lib/api";
 import { Stars } from "./ui";
 
-export function ReaderCard({ reader }: { reader: Reader }) {
+export function ReaderCard({
+  reader,
+  lazyLoadImage = false,
+}: {
+  reader: Reader;
+  lazyLoadImage?: boolean;
+}) {
   return (
     <article className="reader-card reveal">
       <Link to={`/readers/${reader.id}`} className="reader-portrait-wrap">
@@ -13,6 +19,8 @@ export function ReaderCard({ reader }: { reader: Reader }) {
             className="reader-portrait"
             src={`${API_ORIGIN}/api/readers/${reader.id}/image`}
             alt={`${reader.fullName}, SoulSeer Reader`}
+            // ⚡ Bolt: Only lazy-load images that are below the fold to protect LCP
+            loading={lazyLoadImage ? "lazy" : undefined}
           />
         ) : (
           <div className="reader-portrait fallback" aria-hidden="true">

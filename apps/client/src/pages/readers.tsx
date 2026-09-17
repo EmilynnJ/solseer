@@ -108,8 +108,12 @@ export function ReadersPage() {
         <Notice tone="error">{readers.error}</Notice>
       ) : filtered.length ? (
         <div className="reader-grid">
-          {filtered.map((reader) => (
-            <ReaderCard key={reader.id} reader={reader} />
+          {filtered.map((reader, index) => (
+            <ReaderCard
+              key={reader.id}
+              reader={reader}
+              lazyLoadImage={index > 3}
+            />
           ))}
         </div>
       ) : (

@@ -1,3 +1,6 @@
 ## 2026-09-01 - Prevent Memory Bloat in Drizzle Pagination with Correlated Subqueries
 **Learning:** Using `LEFT JOIN` and `GROUP BY` to count related records (e.g., counting comments for posts, or reviews for readers) causes significant memory bloat and performance degradation during pagination due to the database returning a row for every joined record before grouping them.
 **Action:** Replace the `LEFT JOIN` + `GROUP BY` pattern with a correlated subquery using `sql<number>'(select count(*)::int from child_table where parentId = ${parent_table.id})'` to significantly improve query performance and reduce memory usage in Drizzle ORM/PostgreSQL.
+## 2026-09-02 - Protect LCP with Conditional Lazy Loading for Images
+**Learning:** Adding `loading="lazy"` to all images indiscriminately causes a performance regression for images located above the fold. The browser's preload scanner will delay loading these critical assets, negatively impacting the Largest Contentful Paint (LCP) metric.
+**Action:** When implementing lazy loading on components used in lists/grids (e.g., Reader Cards), use a configurable prop (e.g., `lazyLoadImage={index > 3}`) to ensure images above the fold are loaded eagerly while the rest are lazy-loaded.
