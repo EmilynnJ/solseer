@@ -351,31 +351,44 @@ export async function disableMeeting(
   }
 }
 
+let cachedPublicKeyUrl: string | undefined;
+let cachedPublicKey: CryptoKey | undefined;
+
 export async function verifyRealtimeKitSignature(
   rawBody: ArrayBuffer,
   signature: string,
   publicKeyUrl: string,
 ): Promise<boolean> {
-  const response = await fetch(publicKeyUrl, {
-    signal: AbortSignal.timeout(5_000),
-  });
-  const responseSchema = z.object({
-    success: z.literal(true),
-    data: z.object({ publicKey: z.string().min(1) }),
-  });
-  const publicKeyResponse = responseSchema.parse(await response.json());
-  const pem = publicKeyResponse.data.publicKey
-    .replaceAll("\\n", "")
-    .replace("-----BEGIN PUBLIC KEY-----", "")
-    .replace("-----END PUBLIC KEY-----", "")
-    .replace(/\s+/g, "");
-  const key = await crypto.subtle.importKey(
-    "spki",
-    Uint8Array.from(atob(pem), (character) => character.charCodeAt(0)),
-    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-    false,
-    ["verify"],
-  );
+  let key = cachedPublicKey;
+
+  if (!key || cachedPublicKeyUrl !== publicKeyUrl) {
+    const response = await fetch(publicKeyUrl, {
+      signal: AbortSignal.timeout(5_000),
+    });
+    const responseSchema = z.object({
+      success: z.literal(true),
+      data: z.object({ publicKey: z.string().min(1) }),
+    });
+    const publicKeyResponse = responseSchema.parse(await response.json());
+    const pem = publicKeyResponse.data.publicKey
+      .replaceAll("\\n", "")
+      .replace("-----BEGIN PUBLIC KEY-----", "")
+      .replace("-----END PUBLIC KEY-----", "")
+      .replace(/\s+/g, "");
+
+    key = await crypto.subtle.importKey(
+      "spki",
+      Uint8Array.from(atob(pem), (character) => character.charCodeAt(0)),
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false,
+      ["verify"],
+    );
+
+    // Cache the key for future requests
+    cachedPublicKey = key;
+    cachedPublicKeyUrl = publicKeyUrl;
+  }
+
   return crypto.subtle.verify(
     "RSASSA-PKCS1-v1_5",
     key,
@@ -383,4 +396,3 @@ export async function verifyRealtimeKitSignature(
     rawBody,
   );
 }
-
