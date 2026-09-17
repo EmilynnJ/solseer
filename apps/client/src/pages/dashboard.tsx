@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   Elements,
   PaymentElement,
@@ -85,16 +85,35 @@ function ClientDashboard() {
     () => api<{ transactions: LedgerEntry[] }>("/transactions"),
     [],
   );
-  const active =
-    history.data?.readings.filter((item) =>
-      ["pending", "preflight", "connecting", "active", "ending"].includes(
-        item.status,
-      ),
-    ) ?? [];
-  const completed =
-    history.data?.readings.filter((item) =>
-      ["ended", "failed", "cancelled"].includes(item.status),
-    ) ?? [];
+  // ⚡ Bolt: Single-pass O(N) memoized aggregation to avoid multiple array filter/reduce passes
+  // and re-allocations on every render of ClientDashboard.
+  const { active, completed, totalInvested, ratedCount, totalCount } = useMemo(() => {
+    const readings = history.data?.readings ?? [];
+    const activeList: Reading[] = [];
+    const completedList: Reading[] = [];
+    let invested = 0;
+    let rated = 0;
+
+    for (let i = 0; i < readings.length; i++) {
+      const item = readings[i];
+      invested += item.totalPrice;
+      if (item.rating) rated++;
+
+      if (["pending", "preflight", "connecting", "active", "ending"].includes(item.status)) {
+        activeList.push(item);
+      } else if (["ended", "failed", "cancelled"].includes(item.status)) {
+        completedList.push(item);
+      }
+    }
+
+    return {
+      active: activeList,
+      completed: completedList,
+      totalInvested: invested,
+      ratedCount: rated,
+      totalCount: readings.length,
+    };
+  }, [history.data?.readings]);
   async function exportData() {
     const data = await api<Record<string, unknown>>("/auth/export");
     const url = URL.createObjectURL(
@@ -135,26 +154,17 @@ function ClientDashboard() {
         <article>
           <BookHeart />
           <span>Readings</span>
-          <strong>{history.data?.readings.length ?? 0}</strong>
+          <strong>{totalCount}</strong>
         </article>
         <article>
           <CircleDollarSign />
           <span>Total invested</span>
-          <strong>
-            {money(
-              history.data?.readings.reduce(
-                (sum, item) => sum + item.totalPrice,
-                0,
-              ) ?? 0,
-            )}
-          </strong>
+          <strong>{money(totalInvested)}</strong>
         </article>
         <article>
           <Star />
           <span>Reviews shared</span>
-          <strong>
-            {history.data?.readings.filter((r) => r.rating).length ?? 0}
-          </strong>
+          <strong>{ratedCount}</strong>
         </article>
       </section>
       <DashboardSection icon={<Radio />} title="Current readings">
