@@ -232,7 +232,9 @@ adminRoutes.get("/readings", async (context) => {
       paymentStatus: readingSessions.paymentStatus,
       failureReason: readingSessions.failureReason,
       createdAt: readingSessions.createdAt,
-      eventCount: sql<number>`(select count(*)::int from ${readingEvents} e where e.reading_id = ${readingSessions.id})`,
+      // ⚡ Bolt: Using Drizzle column mapping instead of raw string SQL aliasing (e.reading_id)
+      // to allow clean query plan caching and prevent identifier mapping overhead
+      eventCount: sql<number>`(select count(*)::int from ${readingEvents} where ${readingEvents.readingId} = ${readingSessions.id})`,
     })
     .from(readingSessions)
     .orderBy(desc(readingSessions.createdAt))
