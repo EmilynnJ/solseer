@@ -169,4 +169,16 @@ describe("API security boundaries", () => {
     expect(body.error.code).toBe("INVALID_UUID");
     expect(body.error.message).toContain("readerId");
   });
+
+  it("rejects oversized JSON payloads even when Content-Length header is missing", async () => {
+    const oversizedBody = JSON.stringify({ data: "x".repeat(70 * 1024) });
+    const response = await SELF.fetch("https://api.example.test/api/forum/posts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: oversizedBody,
+    });
+    expect(response.status).toBe(413);
+    const body = await response.json<{ error: { code: string } }>();
+    expect(body.error.code).toBe("PAYLOAD_TOO_LARGE");
+  });
 });
