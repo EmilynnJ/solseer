@@ -24,6 +24,11 @@ it("links the site footer to an accessibility statement", () => {
   ).toHaveAttribute("href", "/accessibility");
   expect(screen.getByRole("contentinfo")).not.toHaveTextContent("entertainment");
   expect(screen.getByRole("contentinfo")).toHaveTextContent("accessible website for people with disabilities");
+  expect(
+    within(screen.getByRole("contentinfo")).getByRole("link", {
+      name: "Disclaimer",
+    }),
+  ).toHaveAttribute("href", "/disclaimer");
 });
 
 it("offers a labeled accessibility statement and contact route without claiming certification", () => {

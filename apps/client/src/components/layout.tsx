@@ -119,6 +119,7 @@ export function Layout() {
           <Link to="/terms">Terms of Use</Link>
           <Link to="/acceptable-use">Acceptable Use</Link>
           <Link to="/eula">EULA</Link>
+          <Link to="/disclaimer">Disclaimer</Link>
           <Link to="/help">Help</Link>
           <Link to="/accessibility">Accessibility</Link>
           <a

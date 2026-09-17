@@ -102,6 +102,7 @@ export function App() {
                 <Route path="acceptable-use" element={<PolicyPage policy="acceptable-use" />} />
                 <Route path="accessibility" element={<PolicyPage policy="accessibility" />} />
                 <Route path="eula" element={<PolicyPage policy="eula" />} />
+                <Route path="disclaimer" element={<PolicyPage policy="disclaimer" />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Routes>

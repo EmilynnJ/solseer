@@ -7,6 +7,7 @@ import terms from "../content/policies/terms.html?raw";
 import acceptableUse from "../content/policies/acceptable-use.html?raw";
 import accessibility from "../content/policies/accessibility.html?raw";
 import eula from "../content/policies/eula.html?raw";
+import disclaimer from "../content/policies/disclaimer.html?raw";
 import "./policy.css";
 
 const policies = {
@@ -15,6 +16,7 @@ const policies = {
   "acceptable-use": { title: "Acceptable Use Policy", html: acceptableUse },
   accessibility: { title: "Accessibility Statement", html: accessibility },
   eula: { title: "End User License Agreement", html: eula },
+  disclaimer: { title: "Disclaimer", html: disclaimer },
 };
 
 export function PolicyPage({ policy }: { policy: keyof typeof policies }) {
