@@ -4,7 +4,7 @@ import type { Reader } from "../types";
 import { API_ORIGIN, money } from "../lib/api";
 import { Stars } from "./ui";
 
-export function ReaderCard({ reader }: { reader: Reader }) {
+export function ReaderCard({ reader, priority }: { reader: Reader, priority?: boolean }) {
   return (
     <article className="reader-card reveal">
       <Link to={`/readers/${reader.id}`} className="reader-portrait-wrap">
@@ -13,6 +13,8 @@ export function ReaderCard({ reader }: { reader: Reader }) {
             className="reader-portrait"
             src={`${API_ORIGIN}/api/readers/${reader.id}/image`}
             alt={`${reader.fullName}, SoulSeer Reader`}
+            /* ⚡ Bolt: Lazy load below-the-fold images to improve rendering performance */
+            loading={priority ? "eager" : "lazy"}
           />
         ) : (
           <div className="reader-portrait fallback" aria-hidden="true">
