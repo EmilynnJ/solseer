@@ -169,4 +169,61 @@ describe("API security boundaries", () => {
     expect(body.error.code).toBe("INVALID_UUID");
     expect(body.error.message).toContain("readerId");
   });
+
+  it("handles admin balance adjustment database errors securely without leaking exceptions", async () => {
+    const { adminRoutes } = await import("../src/routes/admin");
+    const testApp = new Hono<AppBindings>();
+    testApp.post("/test-balance-adjust", async (c) => {
+      c.set("user", {
+        id: "11111111-1111-1111-1111-111111111111",
+        role: "admin",
+        status: "active",
+        email: "admin@example.com",
+        username: "admin",
+        fullName: "Admin",
+        neonAuthUserId: "auth-1",
+      });
+      const handlers = adminRoutes.routes.filter(
+        (r) => r.path === "/balance-adjust" && r.method === "POST",
+      );
+      const handler = handlers[handlers.length - 1]?.handler;
+      if (!handler) throw new Error("Handler not found");
+      return handler(c, async () => {});
+    });
+    testApp.onError((err, c) => errorResponse(err, c));
+
+    // Mock DB SQL to throw 'insufficient_balance'
+    vi.mock("../src/lib/db", () => ({
+      createDatabase: () => ({
+        sql: Object.assign(
+          async () => {
+            throw new Error("P0001: insufficient_balance");
+          },
+          { unsafe: () => {} },
+        ),
+      }),
+    }));
+
+    const res = await testApp.request(
+      "/test-balance-adjust",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: "22222222-2222-4222-8222-222222222222",
+          amountCents: -5000,
+          reason: "Manual deduction for chargeback",
+          idempotencyKey: "adj-test-key-12345",
+        }),
+      },
+      { DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/test" },
+    );
+
+    expect(res.status).toBe(409);
+    const body = await res.json<{ error: { code: string; message: string } }>();
+    expect(body.error.code).toBe("INSUFFICIENT_BALANCE");
+    expect(body.error.message).toBe("User balance cannot be adjusted below zero.");
+
+    vi.restoreAllMocks();
+  });
 });
