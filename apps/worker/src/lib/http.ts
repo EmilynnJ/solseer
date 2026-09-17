@@ -99,13 +99,34 @@ export function boundedJson(maxBytes = 64 * 1024): MiddlewareHandler {
       return;
     }
     const rawLength = context.req.header("Content-Length");
-    const length = rawLength ? Number(rawLength) : 0;
-    if (!Number.isFinite(length) || length > maxBytes) {
-      throw new AppError(
-        413,
-        "PAYLOAD_TOO_LARGE",
-        "The request body is too large.",
-      );
+    if (rawLength !== undefined) {
+      const length = Number(rawLength);
+      if (!Number.isFinite(length) || length > maxBytes) {
+        throw new AppError(
+          413,
+          "PAYLOAD_TOO_LARGE",
+          "The request body is too large.",
+        );
+      }
+    } else if (context.req.raw.body) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      const reader = context.req.raw.clone().body?.getReader();
+      if (reader) {
+        let totalBytes = 0;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          totalBytes += value.byteLength;
+          if (totalBytes > maxBytes) {
+            await reader.cancel();
+            throw new AppError(
+              413,
+              "PAYLOAD_TOO_LARGE",
+              "The request body is too large.",
+            );
+          }
+        }
+      }
     }
     await next();
   };
