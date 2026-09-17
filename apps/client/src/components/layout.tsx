@@ -143,6 +143,7 @@ export function Layout() {
           </a>
         </div>
         <div className="copyright footer-accessibility">
+          <p>For entertainment purposes only.</p>
           <p>
             SoulSeer is committed to providing an accessible website for people
             with disabilities. If you experience difficulty accessing any part

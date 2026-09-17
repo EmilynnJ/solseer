@@ -22,7 +22,9 @@ it("links the site footer to an accessibility statement", () => {
       name: "Accessibility",
     }),
   ).toHaveAttribute("href", "/accessibility");
-  expect(screen.getByRole("contentinfo")).not.toHaveTextContent("entertainment");
+  expect(screen.getByRole("contentinfo")).toHaveTextContent(
+    "For entertainment purposes only.",
+  );
   expect(screen.getByRole("contentinfo")).toHaveTextContent("accessible website for people with disabilities");
   expect(
     within(screen.getByRole("contentinfo")).getByRole("link", {
