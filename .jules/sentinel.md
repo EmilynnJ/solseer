@@ -12,3 +12,8 @@
 **Vulnerability:** The `policy.tsx` component used `dangerouslySetInnerHTML={{ __html: html }}` to render HTML content from local files. While currently using local content, this pattern is generally unsafe as it leaves the application vulnerable to XSS if the content source is ever changed to include user input or untrusted API data.
 **Learning:** `dangerouslySetInnerHTML` should only be used when absolutely necessary and always with sanitized input.
 **Prevention:** Always use a sanitization library like `dompurify` when using `dangerouslySetInnerHTML`, even if the initial content seems safe, to prevent future vulnerabilities. Wrap the input like `DOMPurify.sanitize(html)`.
+
+## 2026-09-08 - Stored Procedure Database Exception Mapping in Balance Adjustment Route
+**Vulnerability:** In `POST /api/admin/balance-adjust`, raw calls to stored procedure `public.adjust_wallet_balance` were unhandled. When business logic constraints (such as `invalid_adjustment` or `insufficient_balance`) were triggered in PostgreSQL, unhandled database exceptions caused 500 Internal Server Errors and leaked database internals.
+**Learning:** Stored procedure `RAISE EXCEPTION` statements in PL/pgSQL bubble up as database driver exceptions in Hono handlers.
+**Prevention:** Always wrap database stored procedure execution calls in `try/catch` blocks and explicitly map business constraint error strings into clean `AppError` exceptions (`400 Bad Request` or `409 Conflict`).

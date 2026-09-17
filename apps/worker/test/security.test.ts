@@ -3,6 +3,7 @@ import { SELF } from "cloudflare:test";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { errorResponse } from "../src/lib/errors";
+import { adminRoutes } from "../src/routes/admin";
 import { uploadRoutes } from "../src/routes/uploads";
 import { downloadLimitedJson } from "../src/routes/webhooks";
 import type { AppBindings } from "../src/types";
@@ -126,6 +127,95 @@ describe("API security boundaries", () => {
     expect(body.error.message).toContain("must be a valid UUID");
   });
 
+  it("maps balance adjustment Postgres exceptions into structured AppError responses", async () => {
+    const dbModule = await import("../src/lib/db");
+    const spy = vi.spyOn(dbModule, "createDatabase").mockImplementation((databaseUrl: string) => {
+      const mockSql = Object.assign(
+        () => {
+          if (databaseUrl.includes("invalid_adjustment")) {
+            return Promise.reject(new Error("db_error: invalid_adjustment"));
+          }
+          if (databaseUrl.includes("insufficient_balance")) {
+            return Promise.reject(new Error("db_error: insufficient_balance"));
+          }
+          return Promise.resolve({ rows: [{ result: { success: true } }] });
+        },
+        { transaction: vi.fn() },
+      ) as unknown as ReturnType<typeof dbModule.createDatabase>["sql"];
+
+      return {
+        db: {} as ReturnType<typeof dbModule.createDatabase>["db"],
+        sql: mockSql,
+      };
+    });
+
+    try {
+      const testApp = new Hono<AppBindings>();
+      testApp.post("/test-balance-adjust", async (c) => {
+        c.set("user", {
+          id: "11111111-1111-1111-1111-111111111111",
+          role: "admin",
+          status: "active",
+          email: "admin@example.com",
+          username: "admin",
+          fullName: "Admin",
+          neonAuthUserId: "auth-1",
+        });
+        const handlers = adminRoutes.routes.filter(
+          (r) => r.path === "/balance-adjust" && r.method === "POST",
+        );
+        const handler = handlers[handlers.length - 1]?.handler;
+        if (!handler) throw new Error("Handler not found");
+        await handler(c, async () => {});
+      });
+      testApp.onError((err, c) => errorResponse(err, c));
+
+      // Test invalid_adjustment error mapping
+      const resInvalid = await testApp.request(
+        "/test-balance-adjust",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+            amountCents: 100,
+            reason: "valid reason string",
+            idempotencyKey: "test-idempotency-key-12345",
+          }),
+        },
+        {
+          DATABASE_URL: "invalid_adjustment",
+        },
+      );
+      expect(resInvalid.status).toBe(400);
+      const bodyInvalid = await resInvalid.json<{ error: { code: string; message: string } }>();
+      expect(bodyInvalid.error.code).toBe("INVALID_BALANCE_ADJUSTMENT");
+
+      // Test insufficient_balance error mapping
+      const resInsufficient = await testApp.request(
+        "/test-balance-adjust",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+            amountCents: -5000,
+            reason: "valid reason string",
+            idempotencyKey: "test-idempotency-key-12346",
+          }),
+        },
+        {
+          DATABASE_URL: "insufficient_balance",
+        },
+      );
+      expect(resInsufficient.status).toBe(409);
+      const bodyInsufficient = await resInsufficient.json<{ error: { code: string; message: string } }>();
+      expect(bodyInsufficient.error.code).toBe("INSUFFICIENT_BALANCE");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("rejects invalid readerId query parameter for admin upload capability request", async () => {
     const testApp = new Hono<AppBindings>();
     testApp.post("/test-capability", async (c) => {
@@ -143,7 +233,7 @@ describe("API security boundaries", () => {
       );
       const uploadHandler = handlers[handlers.length - 1]?.handler;
       if (!uploadHandler) throw new Error("Handler not found");
-      return uploadHandler(c, async () => {});
+      await uploadHandler(c, async () => {});
     });
     testApp.onError((err, c) => errorResponse(err, c));
 
