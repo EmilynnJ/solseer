@@ -31,13 +31,13 @@ export function ReaderCard({ reader }: { reader: Reader }) {
         <Stars value={Number(reader.rating)} count={reader.reviewCount} />
         <p className="reader-bio">{reader.bio}</p>
         <div className="rate-row">
-          <span>
+          <span title="Chat reading rate">
             <MessageCircle /> {money(reader.pricingChat)}
           </span>
-          <span>
+          <span title="Voice reading rate">
             <Mic /> {money(reader.pricingVoice)}
           </span>
-          <span>
+          <span title="Video reading rate">
             <Video /> {money(reader.pricingVideo)}
           </span>
         </div>
