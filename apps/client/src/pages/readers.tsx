@@ -108,8 +108,8 @@ export function ReadersPage() {
         <Notice tone="error">{readers.error}</Notice>
       ) : filtered.length ? (
         <div className="reader-grid">
-          {filtered.map((reader) => (
-            <ReaderCard key={reader.id} reader={reader} />
+          {filtered.map((reader, index) => (
+            <ReaderCard key={reader.id} reader={reader} priority={index < 4} />
           ))}
         </div>
       ) : (
