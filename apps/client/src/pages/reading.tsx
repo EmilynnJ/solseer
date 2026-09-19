@@ -386,7 +386,7 @@ function SessionSummary({
                 {[1, 2, 3, 4, 5].map((value) => (
                   <button
                     type="button"
-                    aria-label={`${value} stars`}
+                    aria-label={`${value} ${value === 1 ? "star" : "stars"}`}
                     className={value <= rating ? "active" : ""}
                     onClick={() => setRating(value)}
                     key={value}
