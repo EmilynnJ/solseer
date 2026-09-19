@@ -78,6 +78,8 @@ export function ReaderProfilePage() {
         <div className="profile-image">
           {reader.profileImageKey ? (
             <img
+              /* ⚡ Bolt: Added fetchPriority="high" to above-the-fold hero image to improve LCP */
+              fetchPriority="high"
               src={`${API_ORIGIN}/api/readers/${reader.id}/image`}
               alt={reader.fullName}
             />

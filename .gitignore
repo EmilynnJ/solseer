@@ -72,6 +72,9 @@ web_modules/
 .env
 .env.*
 !.env.example
+
+# Wrangler
+.wrangler/
 coverage/
 *.log
 .DS_Store
