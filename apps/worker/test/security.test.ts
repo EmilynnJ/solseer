@@ -3,6 +3,7 @@ import { SELF } from "cloudflare:test";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { errorResponse } from "../src/lib/errors";
+import { boundedJson } from "../src/lib/http";
 import { uploadRoutes } from "../src/routes/uploads";
 import { downloadLimitedJson } from "../src/routes/webhooks";
 import type { AppBindings } from "../src/types";
@@ -168,5 +169,27 @@ describe("API security boundaries", () => {
     const body = await res.json<{ error: { code: string; message: string } }>();
     expect(body.error.code).toBe("INVALID_UUID");
     expect(body.error.message).toContain("readerId");
+  });
+
+  it("rejects payloads exceeding size limits when Content-Length header is missing or omitted", async () => {
+    const testApp = new Hono<AppBindings>();
+    testApp.use("*", (c, next) => boundedJson(100)(c, next));
+    testApp.post("/test-stream", (c) => c.json({ ok: true }));
+    testApp.onError((err, c) => errorResponse(err, c));
+
+    // Request with oversized payload without Content-Length header
+    const oversizedBody = JSON.stringify({ data: "x".repeat(200) });
+    const request = new Request("https://api.example.test/test-stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: oversizedBody,
+    });
+    // Explicitly delete Content-Length header if automatically added by Request constructor
+    request.headers.delete("Content-Length");
+
+    const res = await testApp.request(request);
+    expect(res.status).toBe(413);
+    const body = await res.json<{ error: { code: string; message: string } }>();
+    expect(body.error.code).toBe("PAYLOAD_TOO_LARGE");
   });
 });
