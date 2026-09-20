@@ -27,11 +27,17 @@ export function errorResponse(error: unknown, context: Context): Response {
             "The request contains invalid fields.",
             error.flatten(),
           )
-        : new AppError(
-            500,
-            "INTERNAL_ERROR",
-            "The request could not be completed.",
-          );
+        : error instanceof Error && error.message === "Payload Too Large"
+          ? new AppError(
+              413,
+              "PAYLOAD_TOO_LARGE",
+              "The request body is too large.",
+            )
+          : new AppError(
+              500,
+              "INTERNAL_ERROR",
+              "The request could not be completed.",
+            );
 
   logger.error(
     appError.message,
