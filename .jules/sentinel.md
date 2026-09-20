@@ -12,3 +12,8 @@
 **Vulnerability:** The `policy.tsx` component used `dangerouslySetInnerHTML={{ __html: html }}` to render HTML content from local files. While currently using local content, this pattern is generally unsafe as it leaves the application vulnerable to XSS if the content source is ever changed to include user input or untrusted API data.
 **Learning:** `dangerouslySetInnerHTML` should only be used when absolutely necessary and always with sanitized input.
 **Prevention:** Always use a sanitization library like `dompurify` when using `dangerouslySetInnerHTML`, even if the initial content seems safe, to prevent future vulnerabilities. Wrap the input like `DOMPurify.sanitize(html)`.
+
+## 2026-09-20 - Streaming Body Limit Enforcement When Content-Length Is Missing
+**Vulnerability:** `boundedJson` middleware only checked the `Content-Length` request header to restrict body sizes. If an attacker omitted `Content-Length` or used chunked transfer encoding, large payloads bypassed the check, risking memory exhaustion/DoS.
+**Learning:** Relying solely on `Content-Length` headers for request size validation creates a DoS vulnerability because HTTP clients can omit or manipulate header fields.
+**Prevention:** In request size limit middleware, when `Content-Length` is absent, clone the request body stream and consume/accumulate bytes chunk-by-chunk using `ReadableStreamDefaultReader.read()`, aborting early with HTTP 413 (`PAYLOAD_TOO_LARGE`) if accumulated bytes exceed the threshold.
