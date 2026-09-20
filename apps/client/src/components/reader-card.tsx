@@ -10,6 +10,8 @@ export function ReaderCard({ reader }: { reader: Reader }) {
       <Link to={`/readers/${reader.id}`} className="reader-portrait-wrap">
         {reader.profileImageKey ? (
           <img
+            /* Bolt: lazy load below-the-fold list images */
+            loading="lazy"
             className="reader-portrait"
             src={`${API_ORIGIN}/api/readers/${reader.id}/image`}
             alt={`${reader.fullName}, SoulSeer Reader`}
