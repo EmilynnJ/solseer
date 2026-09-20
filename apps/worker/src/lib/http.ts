@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { uuidSchema } from "@soulseer/shared";
 import { AppError } from "./errors";
 import { logger } from "./log";
@@ -98,16 +99,16 @@ export function boundedJson(maxBytes = 64 * 1024): MiddlewareHandler {
       await next();
       return;
     }
-    const rawLength = context.req.header("Content-Length");
-    const length = rawLength ? Number(rawLength) : 0;
-    if (!Number.isFinite(length) || length > maxBytes) {
-      throw new AppError(
-        413,
-        "PAYLOAD_TOO_LARGE",
-        "The request body is too large.",
-      );
-    }
-    await next();
+    return bodyLimit({
+      maxSize: maxBytes,
+      onError: () => {
+        throw new AppError(
+          413,
+          "PAYLOAD_TOO_LARGE",
+          "The request body is too large.",
+        );
+      },
+    })(context, next);
   };
 }
 
