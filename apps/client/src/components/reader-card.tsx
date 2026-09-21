@@ -28,17 +28,17 @@ export function ReaderCard({ reader }: { reader: Reader }) {
         <h3>
           <Link to={`/readers/${reader.id}`}>{reader.fullName}</Link>
         </h3>
-        <Stars value={Number(reader.rating)} count={reader.reviewCount} />
+        <Stars value={reader.rating} count={reader.reviewCount} />
         <p className="reader-bio">{reader.bio}</p>
-        <div className="rate-row">
-          <span>
-            <MessageCircle /> {money(reader.pricingChat)}
+        <div className="rate-row" aria-label="Per-minute rates">
+          <span aria-label={`Chat rate: ${money(reader.pricingChat)} per minute`}>
+            <MessageCircle aria-hidden="true" /> {money(reader.pricingChat)}
           </span>
-          <span>
-            <Mic /> {money(reader.pricingVoice)}
+          <span aria-label={`Voice rate: ${money(reader.pricingVoice)} per minute`}>
+            <Mic aria-hidden="true" /> {money(reader.pricingVoice)}
           </span>
-          <span>
-            <Video /> {money(reader.pricingVideo)}
+          <span aria-label={`Video rate: ${money(reader.pricingVideo)} per minute`}>
+            <Video aria-hidden="true" /> {money(reader.pricingVideo)}
           </span>
         </div>
         <Link

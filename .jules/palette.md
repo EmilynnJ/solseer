@@ -1,0 +1,3 @@
+## 2026-09-21 - Native Title vs ARIA Labels and Icon-Only Pricing Accessibility
+**Learning:** Native `title` attributes on interactive elements that already have `aria-label` cause redundant/duplicate announcements in screen readers and fail to display on keyboard focus or touch devices. In multi-rate pricing displays (like `ReaderCard`), icon-only rates read as raw numbers without context unless wrapped in descriptive `aria-label` containers with `aria-hidden="true"` on decorative icons.
+**Action:** Use `aria-label` with `aria-hidden="true"` on decorative icons for context-rich pricing items, and avoid adding native `title` attributes to elements that already have `aria-label`.
