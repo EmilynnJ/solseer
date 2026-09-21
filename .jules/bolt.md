@@ -1,3 +1,8 @@
+
 ## 2026-09-01 - Prevent Memory Bloat in Drizzle Pagination with Correlated Subqueries
 **Learning:** Using `LEFT JOIN` and `GROUP BY` to count related records (e.g., counting comments for posts, or reviews for readers) causes significant memory bloat and performance degradation during pagination due to the database returning a row for every joined record before grouping them.
 **Action:** Replace the `LEFT JOIN` + `GROUP BY` pattern with a correlated subquery using `sql<number>'(select count(*)::int from child_table where parentId = ${parent_table.id})'` to significantly improve query performance and reduce memory usage in Drizzle ORM/PostgreSQL.
+
+## 2026-09-21 - Fix LCP and Network Contention with Image Loading Attributes
+**Learning:** React performance can be significantly improved by correctly hinting browser loading priority using standard HTML attributes. Using `loading="lazy"` and `decoding="async"` for off-screen/below-fold images avoids network contention during the initial load, while using `fetchPriority="high"` on above-the-fold likely LCP (Largest Contentful Paint) elements ensures browsers start downloading critical images earlier.
+**Action:** Always apply `loading="lazy"` and `decoding="async"` to secondary images (like list items or below the fold), and explicitly mark hero or main focus images with `fetchPriority="high"`.
