@@ -6,6 +6,7 @@ import { errorResponse } from "../src/lib/errors";
 import { uploadRoutes } from "../src/routes/uploads";
 import { downloadLimitedJson } from "../src/routes/webhooks";
 import type { AppBindings } from "../src/types";
+import { boundedJson } from "../src/lib/http";
 
 describe("API security boundaries", () => {
   it("rejects untrusted domains and non-HTTPS protocols in chat download URLs (SSRF prevention)", async () => {
@@ -168,5 +169,62 @@ describe("API security boundaries", () => {
     const body = await res.json<{ error: { code: string; message: string } }>();
     expect(body.error.code).toBe("INVALID_UUID");
     expect(body.error.message).toContain("readerId");
+  });
+
+  it("rejects JSON payloads exceeding size limit when Content-Length is omitted or streaming", async () => {
+    const testApp = new Hono<AppBindings>();
+    testApp.use("/test-bounded", boundedJson(100));
+    testApp.post("/test-bounded", (c) => c.json({ ok: true }));
+    testApp.onError((err, c) => errorResponse(err, c));
+
+    // Request with Content-Length exceeding limit
+    const resOverContentLength = await testApp.request("/test-bounded", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": "200",
+      },
+      body: JSON.stringify({ data: "x".repeat(150) }),
+    });
+    expect(resOverContentLength.status).toBe(413);
+
+    // Request without Content-Length exceeding limit
+    const largePayload = JSON.stringify({ data: "x".repeat(150) });
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(largePayload));
+        controller.close();
+      },
+    });
+    const requestNoContentLength = new Request("http://localhost/test-bounded", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: stream,
+      // @ts-expect-error duplex required for streaming request body in fetch
+      duplex: "half",
+    });
+
+    const resOmittedContentLength = await testApp.fetch(requestNoContentLength);
+    expect(resOmittedContentLength.status).toBe(413);
+    const body = await resOmittedContentLength.json<{ error: { code: string } }>();
+    expect(body.error.code).toBe("PAYLOAD_TOO_LARGE");
+
+    // Request with spoofed small Content-Length header but oversized body stream
+    const spoofedStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(largePayload));
+        controller.close();
+      },
+    });
+    const requestSpoofedContentLength = new Request("http://localhost/test-bounded", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": "10" },
+      body: spoofedStream,
+      // @ts-expect-error duplex required for streaming request body in fetch
+      duplex: "half",
+    });
+
+    const resSpoofed = await testApp.fetch(requestSpoofedContentLength);
+    expect(resSpoofed.status).toBe(413);
   });
 });
