@@ -1,0 +1,3 @@
+## 2026-09-22 - Focus Management & Escape Key Dismissal in React Modals
+**Learning:** React Modal components require both keyboard dismissal (`Escape` key listener) and focus management (`tabIndex={-1}` and `ref.focus()`) on mount for screen-reader and keyboard accessibility. Decoupling the focus-on-mount logic into a separate `useEffect` with an empty dependency array `[]` prevents stealing focus from active child inputs when parent components re-render.
+**Action:** When creating or updating Modal components, attach a global `keydown` listener for `Escape` key dismissal and focus the modal container once on mount with `tabIndex={-1}`.
