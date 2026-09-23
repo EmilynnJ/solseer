@@ -3,6 +3,8 @@ import { SELF } from "cloudflare:test";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { errorResponse } from "../src/lib/errors";
+import * as dbModule from "../src/lib/db";
+import { adminRoutes } from "../src/routes/admin";
 import { uploadRoutes } from "../src/routes/uploads";
 import { downloadLimitedJson } from "../src/routes/webhooks";
 import type { AppBindings } from "../src/types";
@@ -168,5 +170,87 @@ describe("API security boundaries", () => {
     const body = await res.json<{ error: { code: string; message: string } }>();
     expect(body.error.code).toBe("INVALID_UUID");
     expect(body.error.message).toContain("readerId");
+  });
+
+  it("maps balance adjustment Postgres exceptions to structured AppErrors", async () => {
+    const testApp = new Hono<AppBindings>();
+    testApp.post("/balance-adjust", async (c) => {
+      c.set("user", {
+        id: "11111111-1111-1111-1111-111111111111",
+        role: "admin",
+        status: "active",
+        email: "admin@example.com",
+        username: "admin",
+        fullName: "Admin",
+        neonAuthUserId: "auth-1",
+      });
+      const handlers = adminRoutes.routes.filter(
+        (r) => r.path === "/balance-adjust" && r.method === "POST",
+      );
+      const handler = handlers[handlers.length - 1]?.handler;
+      if (!handler) throw new Error("Handler not found");
+      return (await handler(c, async () => {})) as Response;
+    });
+    testApp.onError((err, c) => errorResponse(err, c));
+
+    const createDbSpy = vi.spyOn(dbModule, "createDatabase").mockImplementation(() => {
+      const mockSql = () => Promise.reject(new Error("invalid_adjustment"));
+      return {
+        db: {} as unknown as ReturnType<typeof dbModule.createDatabase>["db"],
+        sql: mockSql as unknown as ReturnType<typeof dbModule.createDatabase>["sql"],
+      };
+    });
+
+    const res1 = await testApp.request(
+      "/balance-adjust",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: "22222222-2222-4222-8222-222222222222",
+          amountCents: -500,
+          reason: "Adjustment reason test",
+          idempotencyKey: "key-12345678",
+        }),
+      },
+      {
+        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/test",
+      },
+    );
+
+    expect(res1.status).toBe(400);
+    const body1 = await res1.json<{ error: { code: string } }>();
+    expect(body1.error.code).toBe("INVALID_ADJUSTMENT");
+
+    createDbSpy.mockImplementation(() => {
+      const mockSql = () => Promise.reject(new Error("insufficient_balance"));
+      return {
+        db: {} as unknown as ReturnType<typeof dbModule.createDatabase>["db"],
+        sql: mockSql as unknown as ReturnType<typeof dbModule.createDatabase>["sql"],
+      };
+    });
+
+    const res2 = await testApp.request(
+      "/balance-adjust",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: "22222222-2222-4222-8222-222222222222",
+          amountCents: -50000,
+          reason: "Adjustment reason test",
+          idempotencyKey: "key-12345679",
+        }),
+      },
+      {
+        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/test",
+      },
+    );
+
+    expect(res2.status).toBe(409);
+    const body2 = await res2.json<{ error: { code: string } }>();
+    expect(body2.error.code).toBe("INSUFFICIENT_BALANCE");
+
+    createDbSpy.mockRestore();
   });
 });
