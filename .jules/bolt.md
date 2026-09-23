@@ -1,3 +1,6 @@
 ## 2026-09-01 - Prevent Memory Bloat in Drizzle Pagination with Correlated Subqueries
 **Learning:** Using `LEFT JOIN` and `GROUP BY` to count related records (e.g., counting comments for posts, or reviews for readers) causes significant memory bloat and performance degradation during pagination due to the database returning a row for every joined record before grouping them.
-**Action:** Replace the `LEFT JOIN` + `GROUP BY` pattern with a correlated subquery using `sql<number>'(select count(*)::int from child_table where parentId = ${parent_table.id})'` to significantly improve query performance and reduce memory usage in Drizzle ORM/PostgreSQL.
+**Action:** Replace the `LEFT JOIN` + `GROUP BY` pattern with a correlated subquery using `sql<number>'(select count(*)::int from child_table where parentId = ${parent_table.id})'` to significantly improve query performance and reduce memory usage in Drizzle ORM/PostgreSQL.## 2024-05-18 - Native Image Loading Optimization
+
+**Learning:** Native `fetchPriority="high"`, `loading="lazy"`, and `decoding="async"` attributes are the most efficient way to optimize image loading performance. Using them appropriately prevents main thread blocking and optimizes Largest Contentful Paint (LCP) and initial load bandwidth.
+**Action:** Always ensure that above-the-fold hero images get `fetchPriority="high"` (and no `loading="lazy"`) and below-the-fold images get `loading="lazy"`. Both should receive `decoding="async"` to keep image decoding off the main thread.
