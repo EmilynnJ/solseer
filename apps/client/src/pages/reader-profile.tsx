@@ -80,6 +80,8 @@ export function ReaderProfilePage() {
             <img
               src={`${API_ORIGIN}/api/readers/${reader.id}/image`}
               alt={reader.fullName}
+              fetchPriority="high" /* Improves LCP for hero image */
+              decoding="async" /* Prevents image decoding from blocking main thread */
             />
           ) : (
             <span>{reader.fullName.slice(0, 1)}</span>
