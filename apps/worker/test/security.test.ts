@@ -126,9 +126,68 @@ describe("API security boundaries", () => {
     expect(body.error.message).toContain("must be a valid UUID");
   });
 
+  it("maps adjust_wallet_balance database exceptions to structured AppErrors for admin balance adjust", async () => {
+    const { adminRoutes } = await import("../src/routes/admin");
+    const testApp = new Hono<AppBindings>();
+    testApp.post("/test-adjust", (c) => {
+      c.set("user", {
+        id: "11111111-1111-1111-1111-111111111111",
+        role: "admin",
+        status: "active",
+        email: "admin@example.com",
+        username: "admin",
+        fullName: "Admin",
+        neonAuthUserId: "auth-1",
+      });
+      const handlers = adminRoutes.routes.filter(
+        (r) => r.path === "/balance-adjust" && r.method === "POST",
+      );
+      const adjustHandler = handlers[handlers.length - 1]?.handler;
+      if (!adjustHandler) throw new Error("Handler not found");
+      return adjustHandler(c, async () => {}) as Promise<Response>;
+    });
+    testApp.onError((err, c) => errorResponse(err, c));
+
+    // Mock neonSql to throw postgres exception "insufficient_balance"
+    vi.mock("../src/lib/db", async (importOriginal) => {
+      const actual = await importOriginal<Record<string, unknown>>();
+      return {
+        ...actual,
+        createDatabase: vi.fn().mockImplementation(() => ({
+          db: {},
+          sql: vi.fn().mockRejectedValue(new Error("insufficient_balance")),
+        })),
+      };
+    });
+
+    const res = await testApp.request(
+      "/test-adjust",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: "22222222-2222-4222-8222-222222222222",
+          amountCents: -500,
+          reason: "Manual adjustment for testing",
+          idempotencyKey: "idem-key-12345",
+        }),
+      },
+      {
+        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/test",
+      },
+    );
+
+    expect(res.status).toBe(409);
+    const body = await res.json<{ error: { code: string; message: string } }>();
+    expect(body.error.code).toBe("INSUFFICIENT_BALANCE");
+    expect(body.error.message).toContain("insufficient for this deduction");
+
+    vi.restoreAllMocks();
+  });
+
   it("rejects invalid readerId query parameter for admin upload capability request", async () => {
     const testApp = new Hono<AppBindings>();
-    testApp.post("/test-capability", async (c) => {
+    testApp.post("/test-capability", (c) => {
       c.set("user", {
         id: "11111111-1111-1111-1111-111111111111",
         role: "admin",
@@ -143,7 +202,7 @@ describe("API security boundaries", () => {
       );
       const uploadHandler = handlers[handlers.length - 1]?.handler;
       if (!uploadHandler) throw new Error("Handler not found");
-      return uploadHandler(c, async () => {});
+      return uploadHandler(c, async () => {}) as Promise<Response>;
     });
     testApp.onError((err, c) => errorResponse(err, c));
 
