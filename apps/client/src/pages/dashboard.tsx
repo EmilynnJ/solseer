@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   Elements,
   PaymentElement,
@@ -85,16 +85,33 @@ function ClientDashboard() {
     () => api<{ transactions: LedgerEntry[] }>("/transactions"),
     [],
   );
-  const active =
-    history.data?.readings.filter((item) =>
-      ["pending", "preflight", "connecting", "active", "ending"].includes(
-        item.status,
-      ),
-    ) ?? [];
-  const completed =
-    history.data?.readings.filter((item) =>
-      ["ended", "failed", "cancelled"].includes(item.status),
-    ) ?? [];
+  const readings = history.data?.readings;
+  // ⚡ Bolt: Memoize reading history filters and aggregated metrics to avoid redundant
+  // array operations on every component re-render (e.g. modal toggles or state updates)
+  const active = useMemo(
+    () =>
+      readings?.filter((item) =>
+        ["pending", "preflight", "connecting", "active", "ending"].includes(
+          item.status,
+        ),
+      ) ?? [],
+    [readings],
+  );
+  const completed = useMemo(
+    () =>
+      readings?.filter((item) =>
+        ["ended", "failed", "cancelled"].includes(item.status),
+      ) ?? [],
+    [readings],
+  );
+  const totalInvested = useMemo(
+    () => readings?.reduce((sum, item) => sum + item.totalPrice, 0) ?? 0,
+    [readings],
+  );
+  const reviewsCount = useMemo(
+    () => readings?.filter((r) => r.rating).length ?? 0,
+    [readings],
+  );
   async function exportData() {
     const data = await api<Record<string, unknown>>("/auth/export");
     const url = URL.createObjectURL(
@@ -140,21 +157,12 @@ function ClientDashboard() {
         <article>
           <CircleDollarSign />
           <span>Total invested</span>
-          <strong>
-            {money(
-              history.data?.readings.reduce(
-                (sum, item) => sum + item.totalPrice,
-                0,
-              ) ?? 0,
-            )}
-          </strong>
+          <strong>{money(totalInvested)}</strong>
         </article>
         <article>
           <Star />
           <span>Reviews shared</span>
-          <strong>
-            {history.data?.readings.filter((r) => r.rating).length ?? 0}
-          </strong>
+          <strong>{reviewsCount}</strong>
         </article>
       </section>
       <DashboardSection icon={<Radio />} title="Current readings">
@@ -494,12 +502,20 @@ function ReaderDashboard() {
     }
   }
   const earnings = insights.data?.summary.historicalEarnings ?? 0;
-  const pending =
-    history.data?.readings.filter((r) => r.status === "pending") ?? [];
-  const completed =
-    history.data?.readings.filter((item) =>
-      ["ended", "failed", "cancelled"].includes(item.status),
-    ) ?? [];
+  const readings = history.data?.readings;
+  // ⚡ Bolt: Memoize pending and completed reading filters to prevent unnecessary
+  // O(N) array processing on every keystroke when typing in profile or alert forms
+  const pending = useMemo(
+    () => readings?.filter((r) => r.status === "pending") ?? [],
+    [readings],
+  );
+  const completed = useMemo(
+    () =>
+      readings?.filter((item) =>
+        ["ended", "failed", "cancelled"].includes(item.status),
+      ) ?? [],
+    [readings],
+  );
   return (
     <div className="page-shell dashboard">
       <DashboardHeader
