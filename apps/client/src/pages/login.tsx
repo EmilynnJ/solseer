@@ -276,6 +276,7 @@ export function LoginPage() {
                 Password
                 <span className="password-field">
                   <input
+                    id="password-input"
                     required
                     minLength={8}
                     type={show ? "text" : "password"}
@@ -290,6 +291,8 @@ export function LoginPage() {
                   <button
                     type="button"
                     aria-label={show ? "Hide password" : "Show password"}
+                    aria-controls="password-input"
+                    aria-expanded={show}
                     onClick={() => setShow(!show)}
                   >
                     {show ? <EyeOff /> : <Eye />}
