@@ -13,6 +13,9 @@ export function ReaderCard({ reader }: { reader: Reader }) {
             className="reader-portrait"
             src={`${API_ORIGIN}/api/readers/${reader.id}/image`}
             alt={`${reader.fullName}, SoulSeer Reader`}
+            loading="lazy"
+            decoding="async"
+            /* ⚡ Bolt: Added lazy loading and async decoding to list images to save bandwidth and improve main thread performance */
           />
         ) : (
           <div className="reader-portrait fallback" aria-hidden="true">
