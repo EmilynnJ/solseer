@@ -32,13 +32,22 @@ export function ReaderCard({ reader }: { reader: Reader }) {
         <p className="reader-bio">{reader.bio}</p>
         <div className="rate-row">
           <span>
-            <MessageCircle /> {money(reader.pricingChat)}
+            <MessageCircle aria-hidden="true" />
+            <span className="sr-only">Chat rate: </span>
+            {money(reader.pricingChat)}
+            <span className="sr-only"> per minute</span>
           </span>
           <span>
-            <Mic /> {money(reader.pricingVoice)}
+            <Mic aria-hidden="true" />
+            <span className="sr-only">Voice rate: </span>
+            {money(reader.pricingVoice)}
+            <span className="sr-only"> per minute</span>
           </span>
           <span>
-            <Video /> {money(reader.pricingVideo)}
+            <Video aria-hidden="true" />
+            <span className="sr-only">Video rate: </span>
+            {money(reader.pricingVideo)}
+            <span className="sr-only"> per minute</span>
           </span>
         </div>
         <Link
