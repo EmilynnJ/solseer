@@ -3,6 +3,7 @@ import { SELF } from "cloudflare:test";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { errorResponse } from "../src/lib/errors";
+import { adminRoutes } from "../src/routes/admin";
 import { uploadRoutes } from "../src/routes/uploads";
 import { downloadLimitedJson } from "../src/routes/webhooks";
 import type { AppBindings } from "../src/types";
@@ -168,5 +169,107 @@ describe("API security boundaries", () => {
     const body = await res.json<{ error: { code: string; message: string } }>();
     expect(body.error.code).toBe("INVALID_UUID");
     expect(body.error.message).toContain("readerId");
+  });
+
+  it("maps adjust_wallet_balance invalid_adjustment database exceptions to 400 Bad Request", async () => {
+    const testApp = new Hono<AppBindings>();
+    testApp.post("/test-balance-adjust", async (c) => {
+      c.set("user", {
+        id: "11111111-1111-1111-1111-111111111111",
+        role: "admin",
+        status: "active",
+        email: "admin@example.com",
+        username: "admin",
+        fullName: "Admin",
+        neonAuthUserId: "auth-1",
+      });
+      const handlers = adminRoutes.routes.filter(
+        (r) => r.path === "/balance-adjust" && r.method === "POST",
+      );
+      const handler = handlers[handlers.length - 1]?.handler;
+      if (!handler) throw new Error("Handler not found");
+      return handler(c, async () => {});
+    });
+    testApp.onError((err, c) => errorResponse(err, c));
+
+    const dbModule = await import("../src/lib/db");
+    const spy = vi.spyOn(dbModule, "createDatabase").mockReturnValue({
+      sql: vi.fn().mockRejectedValue(new Error("invalid_adjustment")),
+    } as unknown as ReturnType<typeof dbModule.createDatabase>);
+
+    const res = await testApp.request(
+      "/test-balance-adjust",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: "22222222-2222-4222-8222-222222222222",
+          amountCents: 1000,
+          reason: "Adjustment for testing",
+          idempotencyKey: "test-idempotency-key-12345",
+        }),
+      },
+      {
+        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/test",
+      },
+    );
+
+    spy.mockRestore();
+
+    expect(res.status).toBe(400);
+    const body = await res.json<{ error: { code: string; message: string } }>();
+    expect(body.error.code).toBe("INVALID_ADJUSTMENT");
+    expect(body.error.message).toBe("Invalid balance adjustment requested.");
+  });
+
+  it("maps adjust_wallet_balance insufficient_balance database exceptions to 409 Conflict", async () => {
+    const testApp = new Hono<AppBindings>();
+    testApp.post("/test-balance-adjust", async (c) => {
+      c.set("user", {
+        id: "11111111-1111-1111-1111-111111111111",
+        role: "admin",
+        status: "active",
+        email: "admin@example.com",
+        username: "admin",
+        fullName: "Admin",
+        neonAuthUserId: "auth-1",
+      });
+      const handlers = adminRoutes.routes.filter(
+        (r) => r.path === "/balance-adjust" && r.method === "POST",
+      );
+      const handler = handlers[handlers.length - 1]?.handler;
+      if (!handler) throw new Error("Handler not found");
+      return handler(c, async () => {});
+    });
+    testApp.onError((err, c) => errorResponse(err, c));
+
+    const dbModule = await import("../src/lib/db");
+    const spy = vi.spyOn(dbModule, "createDatabase").mockReturnValue({
+      sql: vi.fn().mockRejectedValue(new Error("insufficient_balance")),
+    } as unknown as ReturnType<typeof dbModule.createDatabase>);
+
+    const res = await testApp.request(
+      "/test-balance-adjust",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: "22222222-2222-4222-8222-222222222222",
+          amountCents: -5000,
+          reason: "Deduction for testing",
+          idempotencyKey: "test-idempotency-key-67890",
+        }),
+      },
+      {
+        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/test",
+      },
+    );
+
+    spy.mockRestore();
+
+    expect(res.status).toBe(409);
+    const body = await res.json<{ error: { code: string; message: string } }>();
+    expect(body.error.code).toBe("INSUFFICIENT_BALANCE");
+    expect(body.error.message).toBe("Insufficient wallet balance for deduction.");
   });
 });
