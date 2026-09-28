@@ -3,6 +3,7 @@ import { SELF } from "cloudflare:test";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { errorResponse } from "../src/lib/errors";
+import { boundedJson } from "../src/lib/http";
 import { uploadRoutes } from "../src/routes/uploads";
 import { downloadLimitedJson } from "../src/routes/webhooks";
 import type { AppBindings } from "../src/types";
@@ -168,5 +169,24 @@ describe("API security boundaries", () => {
     const body = await res.json<{ error: { code: string; message: string } }>();
     expect(body.error.code).toBe("INVALID_UUID");
     expect(body.error.message).toContain("readerId");
+  });
+
+  it("rejects oversized JSON payload even when Content-Length header is omitted", async () => {
+    const testApp = new Hono<AppBindings>();
+    testApp.use("/test", boundedJson(100));
+    testApp.post("/test", (c) => c.json({ ok: true }));
+    testApp.onError((err, c) => errorResponse(err, c));
+
+    const largeData = JSON.stringify({ data: "x".repeat(200) });
+    const req = new Request("http://localhost/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: largeData,
+    });
+
+    const res = await testApp.request(req);
+    expect(res.status).toBe(413);
+    const body = await res.json<{ error: { code: string } }>();
+    expect(body.error.code).toBe("PAYLOAD_TOO_LARGE");
   });
 });
