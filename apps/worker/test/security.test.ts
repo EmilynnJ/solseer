@@ -5,9 +5,46 @@ import { describe, expect, it, vi } from "vitest";
 import { errorResponse } from "../src/lib/errors";
 import { uploadRoutes } from "../src/routes/uploads";
 import { downloadLimitedJson } from "../src/routes/webhooks";
+import { boundedJson } from "../src/lib/http";
 import type { AppBindings } from "../src/types";
 
 describe("API security boundaries", () => {
+  it("enforces payload size limits in boundedJson middleware on streamed streams even without Content-Length", async () => {
+    const testApp = new Hono<AppBindings>();
+    testApp.use("/test-json", boundedJson(100));
+    testApp.post("/test-json", async (c) => {
+      const data: unknown = await c.req.json();
+      return c.json({ ok: true, data });
+    });
+    testApp.onError((err, c) => errorResponse(err, c));
+
+    // Payload exceeding 100 bytes without Content-Length header
+    const largePayload = JSON.stringify({ message: "A".repeat(200) });
+    const request = new Request("http://localhost/test-json", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: largePayload,
+    });
+
+    const res = await testApp.request(request);
+    expect(res.status).toBe(413);
+    const body = await res.json<{ error: { code: string; message: string } }>();
+    expect(body.error.code).toBe("PAYLOAD_TOO_LARGE");
+
+    // Valid payload within limit
+    const validRequest = new Request("http://localhost/test-json", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "Hello" }),
+    });
+
+    const validRes = await testApp.request(validRequest);
+    expect(validRes.status).toBe(200);
+    const validBody = await validRes.json<{ ok: boolean; data: { message: string } }>();
+    expect(validBody.ok).toBe(true);
+    expect(validBody.data.message).toBe("Hello");
+  });
+
   it("rejects untrusted domains and non-HTTPS protocols in chat download URLs (SSRF prevention)", async () => {
     await expect(
       downloadLimitedJson("http://169.254.169.254/latest/meta-data", 1000),
@@ -128,7 +165,7 @@ describe("API security boundaries", () => {
 
   it("rejects invalid readerId query parameter for admin upload capability request", async () => {
     const testApp = new Hono<AppBindings>();
-    testApp.post("/test-capability", async (c) => {
+    testApp.post("/test-capability", (c) => {
       c.set("user", {
         id: "11111111-1111-1111-1111-111111111111",
         role: "admin",
@@ -143,6 +180,7 @@ describe("API security boundaries", () => {
       );
       const uploadHandler = handlers[handlers.length - 1]?.handler;
       if (!uploadHandler) throw new Error("Handler not found");
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
       return uploadHandler(c, async () => {});
     });
     testApp.onError((err, c) => errorResponse(err, c));

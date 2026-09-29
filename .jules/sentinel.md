@@ -12,3 +12,8 @@
 **Vulnerability:** The `policy.tsx` component used `dangerouslySetInnerHTML={{ __html: html }}` to render HTML content from local files. While currently using local content, this pattern is generally unsafe as it leaves the application vulnerable to XSS if the content source is ever changed to include user input or untrusted API data.
 **Learning:** `dangerouslySetInnerHTML` should only be used when absolutely necessary and always with sanitized input.
 **Prevention:** Always use a sanitization library like `dompurify` when using `dangerouslySetInnerHTML`, even if the initial content seems safe, to prevent future vulnerabilities. Wrap the input like `DOMPurify.sanitize(html)`.
+
+## 2026-09-29 - Request Stream Preservation in Bounded Payload Middleware
+**Vulnerability:** Checking request body size in middleware by consuming `context.req.raw.body` directly locks and disturbs the request stream, causing downstream handlers calling `c.req.json()` to fail.
+**Learning:** In Hono/Fetch middleware, reading `context.req.raw.body` directly consumes the stream for downstream handlers.
+**Prevention:** Read a cloned stream (`context.req.raw.clone().body?.getReader()`) in body-validation middleware so the original request stream remains unconsumed for downstream route handlers.
