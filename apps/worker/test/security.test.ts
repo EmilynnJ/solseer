@@ -3,6 +3,7 @@ import { SELF } from "cloudflare:test";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { errorResponse } from "../src/lib/errors";
+import { boundedJson } from "../src/lib/http";
 import { uploadRoutes } from "../src/routes/uploads";
 import { downloadLimitedJson } from "../src/routes/webhooks";
 import type { AppBindings } from "../src/types";
@@ -168,5 +169,42 @@ describe("API security boundaries", () => {
     const body = await res.json<{ error: { code: string; message: string } }>();
     expect(body.error.code).toBe("INVALID_UUID");
     expect(body.error.message).toContain("readerId");
+  });
+
+  it("enforces max bytes limit in boundedJson on both header and body stream", async () => {
+    const testApp = new Hono<AppBindings>();
+    testApp.use("*", boundedJson(100));
+    testApp.post("/test-json", async (c) => c.json({ ok: true }));
+    testApp.onError((err, c) => errorResponse(err, c));
+
+    const largeData = { text: "x".repeat(200) };
+
+    const resHeader = await testApp.request("/test-json", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(largeData),
+    });
+    expect(resHeader.status).toBe(413);
+
+    const reqStream = new Request("http://localhost/test-json", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(JSON.stringify(largeData)));
+          controller.close();
+        },
+      }),
+    });
+    const resStream = await testApp.fetch(reqStream);
+    expect(resStream.status).toBe(413);
+
+    const smallData = { ok: true };
+    const resSmall = await testApp.request("/test-json", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(smallData),
+    });
+    expect(resSmall.status).toBe(200);
   });
 });
