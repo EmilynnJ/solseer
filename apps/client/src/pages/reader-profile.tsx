@@ -78,6 +78,9 @@ export function ReaderProfilePage() {
         <div className="profile-image">
           {reader.profileImageKey ? (
             <img
+              /* ⚡ Bolt: fetchPriority="high" improves LCP for this hero image; decoding="async" prevents main thread blocking */
+              fetchPriority="high"
+              decoding="async"
               src={`${API_ORIGIN}/api/readers/${reader.id}/image`}
               alt={reader.fullName}
             />

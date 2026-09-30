@@ -10,6 +10,9 @@ export function ReaderCard({ reader }: { reader: Reader }) {
       <Link to={`/readers/${reader.id}`} className="reader-portrait-wrap">
         {reader.profileImageKey ? (
           <img
+            /* ⚡ Bolt: loading="lazy" avoids downloading off-screen images; decoding="async" prevents main thread blocking */
+            loading="lazy"
+            decoding="async"
             className="reader-portrait"
             src={`${API_ORIGIN}/api/readers/${reader.id}/image`}
             alt={`${reader.fullName}, SoulSeer Reader`}
