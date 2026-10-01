@@ -1,10 +1,17 @@
+import React from "react";
 import { Link } from "react-router-dom";
 import { MessageCircle, Mic, Video } from "lucide-react";
 import type { Reader } from "../types";
 import { API_ORIGIN, money } from "../lib/api";
 import { Stars } from "./ui";
 
-export function ReaderCard({ reader }: { reader: Reader }) {
+// ⚡ Bolt: Memoize ReaderCard to prevent unnecessary re-renders when filtering
+// reader lists in ReadersPage, and defer off-screen image loading and decoding.
+export const ReaderCard = React.memo(function ReaderCard({
+  reader,
+}: {
+  reader: Reader;
+}) {
   return (
     <article className="reader-card reveal">
       <Link to={`/readers/${reader.id}`} className="reader-portrait-wrap">
@@ -13,6 +20,8 @@ export function ReaderCard({ reader }: { reader: Reader }) {
             className="reader-portrait"
             src={`${API_ORIGIN}/api/readers/${reader.id}/image`}
             alt={`${reader.fullName}, SoulSeer Reader`}
+            loading="lazy"
+            decoding="async"
           />
         ) : (
           <div className="reader-portrait fallback" aria-hidden="true">
@@ -32,13 +41,22 @@ export function ReaderCard({ reader }: { reader: Reader }) {
         <p className="reader-bio">{reader.bio}</p>
         <div className="rate-row">
           <span>
-            <MessageCircle /> {money(reader.pricingChat)}
+            <MessageCircle aria-hidden="true" />
+            <span className="sr-only">Chat rate: </span>
+            {money(reader.pricingChat)}
+            <span className="sr-only"> per minute</span>
           </span>
           <span>
-            <Mic /> {money(reader.pricingVoice)}
+            <Mic aria-hidden="true" />
+            <span className="sr-only">Voice rate: </span>
+            {money(reader.pricingVoice)}
+            <span className="sr-only"> per minute</span>
           </span>
           <span>
-            <Video /> {money(reader.pricingVideo)}
+            <Video aria-hidden="true" />
+            <span className="sr-only">Video rate: </span>
+            {money(reader.pricingVideo)}
+            <span className="sr-only"> per minute</span>
           </span>
         </div>
         <Link
@@ -50,4 +68,4 @@ export function ReaderCard({ reader }: { reader: Reader }) {
       </div>
     </article>
   );
-}
+});
