@@ -2,7 +2,9 @@
 import { SELF } from "cloudflare:test";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
+import * as dbModule from "../src/lib/db";
 import { errorResponse } from "../src/lib/errors";
+import { adminRoutes } from "../src/routes/admin";
 import { uploadRoutes } from "../src/routes/uploads";
 import { downloadLimitedJson } from "../src/routes/webhooks";
 import type { AppBindings } from "../src/types";
@@ -168,5 +170,57 @@ describe("API security boundaries", () => {
     const body = await res.json<{ error: { code: string; message: string } }>();
     expect(body.error.code).toBe("INVALID_UUID");
     expect(body.error.message).toContain("readerId");
+  });
+
+  it("maps balance adjustment database exceptions to structured AppErrors", async () => {
+    const testApp = new Hono<AppBindings>();
+    testApp.post("/test-balance-adjust", async (c) => {
+      c.set("user", {
+        id: "11111111-1111-1111-1111-111111111111",
+        role: "admin",
+        status: "active",
+        email: "admin@example.com",
+        username: "admin",
+        fullName: "Admin",
+        neonAuthUserId: "auth-1",
+      });
+      const handlers = adminRoutes.routes.filter(
+        (r) => r.path === "/balance-adjust" && r.method === "POST",
+      );
+      const handler = handlers[handlers.length - 1]?.handler;
+      if (!handler) throw new Error("Handler not found");
+      return handler(c, async () => {});
+    });
+    testApp.onError((err, c) => errorResponse(err, c));
+
+    const mockDb = vi.spyOn(dbModule, "createDatabase").mockReturnValue({
+      db: {} as unknown as dbModule.Database,
+      sql: (async () => {
+        throw new Error("insufficient_balance");
+      }) as unknown as dbModule.NeonSql,
+    });
+
+    const res = await testApp.request(
+      "/test-balance-adjust",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: "22222222-2222-2222-2222-222222222222",
+          amountCents: -5000,
+          reason: "Adjustment",
+          idempotencyKey: "idem-key-12345",
+        }),
+      },
+      {
+        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/test",
+      },
+    );
+
+    expect(res.status).toBe(409);
+    const body = await res.json<{ error: { code: string } }>();
+    expect(body.error.code).toBe("INSUFFICIENT_BALANCE");
+
+    mockDb.mockRestore();
   });
 });
