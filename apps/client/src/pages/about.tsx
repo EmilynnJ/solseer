@@ -11,7 +11,13 @@ export function AboutPage() {
         title="Built for guidance with a conscience."
       />
       <section className="founder-story">
-        <img src={BRAND.founderImage} alt="Emilynn, founder of SoulSeer" />
+        <img
+          src={BRAND.founderImage}
+          alt="Emilynn, founder of SoulSeer"
+          loading="lazy"
+          decoding="async"
+          /* ⚡ Bolt: Prevent below-fold image from blocking main thread */
+        />
         <div className="story-copy">
           <p>
             At SoulSeer, we are dedicated to providing ethical, compassionate,

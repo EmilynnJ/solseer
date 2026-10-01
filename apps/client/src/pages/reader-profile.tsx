@@ -80,6 +80,9 @@ export function ReaderProfilePage() {
             <img
               src={`${API_ORIGIN}/api/readers/${reader.id}/image`}
               alt={reader.fullName}
+              fetchpriority="high"
+              decoding="async"
+              /* ⚡ Bolt: LCP optimization for hero profile image */
             />
           ) : (
             <span>{reader.fullName.slice(0, 1)}</span>
