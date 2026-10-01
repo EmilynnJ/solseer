@@ -117,7 +117,10 @@ export function boundedJson(maxBytes = 64 * 1024): MiddlewareHandler {
         if (done) break;
         received += value.byteLength;
         if (received > maxBytes) {
-          await reader.cancel("payload size limit exceeded");
+          await Promise.all([
+            reader.cancel("payload size limit exceeded"),
+            context.req.raw.body?.cancel("payload size limit exceeded"),
+          ]);
           throw new AppError(
             413,
             "PAYLOAD_TOO_LARGE",
