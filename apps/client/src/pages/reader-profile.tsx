@@ -77,9 +77,12 @@ export function ReaderProfilePage() {
       <section className="profile-hero">
         <div className="profile-image">
           {reader.profileImageKey ? (
+            /* ⚡ Bolt: Added fetchPriority="high" for hero LCP image and decoding="async" to prevent main thread blocking */
             <img
               src={`${API_ORIGIN}/api/readers/${reader.id}/image`}
               alt={reader.fullName}
+              fetchPriority="high"
+              decoding="async"
             />
           ) : (
             <span>{reader.fullName.slice(0, 1)}</span>
