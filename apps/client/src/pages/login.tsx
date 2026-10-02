@@ -10,7 +10,7 @@ const PENDING_VERIFICATION_EMAIL = "soulseer.pendingVerificationEmail";
 
 export function LoginPage() {
   const [params] = useSearchParams();
-  const readerInvite = params.get("readerInvite") ?? params.get("invite") ?? "";
+  const readerInvite = params.get("readerInvite") || params.get("invite") || "";
   const auth = useSoulAuth();
   const navigate = useNavigate();
   const pendingVerificationEmail =
