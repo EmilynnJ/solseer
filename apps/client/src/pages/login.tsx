@@ -10,20 +10,21 @@ const PENDING_VERIFICATION_EMAIL = "soulseer.pendingVerificationEmail";
 
 export function LoginPage() {
   const [params] = useSearchParams();
+  const readerInvite = params.get("readerInvite") || params.get("invite") || "";
   const auth = useSoulAuth();
   const navigate = useNavigate();
   const pendingVerificationEmail =
     sessionStorage.getItem(PENDING_VERIFICATION_EMAIL) ?? "";
   const [mode, setMode] = useState<
     "signin" | "signup" | "verify" | "forgot" | "profile"
-  >(pendingVerificationEmail ? "verify" : "signin");
+  >(pendingVerificationEmail ? "verify" : readerInvite ? "signup" : "signin");
   const [form, setForm] = useState({
     email: pendingVerificationEmail,
     password: "",
     name: "",
     username: "",
     otp: "",
-    invite: params.get("readerInvite") ?? params.get("invite") ?? "",
+    invite: readerInvite,
   });
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -76,7 +77,10 @@ export function LoginPage() {
           email: form.email,
           password: form.password,
           name: form.name,
-          callbackURL: `${window.location.origin}/login?complete=1`,
+          callbackURL: `${window.location.origin}/login?${new URLSearchParams({
+            returnTo,
+            ...(form.invite ? { readerInvite: form.invite } : {}),
+          }).toString()}`,
         });
         if (result.error) throw new Error(result.error.message);
         if (!result.data.user.emailVerified) {
@@ -193,7 +197,9 @@ export function LoginPage() {
             {mode === "signin"
               ? "Welcome back"
               : mode === "signup"
-                ? "Join the soul tribe"
+                ? form.invite
+                  ? "Create your reader account"
+                  : "Join the soul tribe"
                 : mode === "verify"
                   ? "Verify your email"
                   : mode === "forgot"
@@ -205,7 +211,9 @@ export function LoginPage() {
               ? `Enter the code sent to ${form.email}.`
               : mode === "profile"
                 ? "Choose how you’ll appear in the SoulSeer community."
-                : "Your account is securely managed by Neon Auth."}
+                : form.invite
+                  ? "Use the email address your reader invitation was sent to."
+                  : "Your account is securely managed by Neon Auth."}
           </p>
           {message && <Notice tone={message.tone}>{message.text}</Notice>}
           {(mode === "signin" || mode === "signup") && (
