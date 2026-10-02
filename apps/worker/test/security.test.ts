@@ -3,6 +3,7 @@ import { SELF } from "cloudflare:test";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { errorResponse } from "../src/lib/errors";
+import { boundedJson } from "../src/lib/http";
 import { uploadRoutes } from "../src/routes/uploads";
 import { downloadLimitedJson } from "../src/routes/webhooks";
 import type { AppBindings } from "../src/types";
@@ -168,5 +169,48 @@ describe("API security boundaries", () => {
     const body = await res.json<{ error: { code: string; message: string } }>();
     expect(body.error.code).toBe("INVALID_UUID");
     expect(body.error.message).toContain("readerId");
+  });
+
+  it("enforces body size limits in boundedJson middleware for streamed and declared payloads", async () => {
+    const testApp = new Hono<AppBindings>();
+    testApp.use("*", boundedJson(100));
+    testApp.post("/test", async (c) => c.json(await c.req.json()));
+    testApp.onError((err, c) => errorResponse(err, c));
+
+    const resContentLength = await testApp.request("/test", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": "200",
+      },
+      body: JSON.stringify({ data: "x".repeat(150) }),
+    });
+    expect(resContentLength.status).toBe(413);
+
+    const streamBody = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(JSON.stringify({ data: "x".repeat(150) })),
+        );
+        controller.close();
+      },
+    });
+    const resStream = await testApp.request("/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: streamBody,
+      // @ts-expect-error duplex is required for stream body fetch
+      duplex: "half",
+    });
+    expect(resStream.status).toBe(413);
+
+    const resValid = await testApp.request("/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ data: "small" }),
+    });
+    expect(resValid.status).toBe(200);
+    const validJson = await resValid.json<{ data: string }>();
+    expect(validJson.data).toBe("small");
   });
 });
