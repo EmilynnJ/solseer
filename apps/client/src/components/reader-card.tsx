@@ -28,7 +28,7 @@ export function ReaderCard({ reader }: { reader: Reader }) {
         <h3>
           <Link to={`/readers/${reader.id}`}>{reader.fullName}</Link>
         </h3>
-        <Stars value={Number(reader.rating)} count={reader.reviewCount} />
+        <Stars value={reader.rating} count={reader.reviewCount} />
         <p className="reader-bio">{reader.bio}</p>
         <div className="rate-row">
           <span>
