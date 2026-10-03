@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   Elements,
   PaymentElement,
@@ -85,16 +85,32 @@ function ClientDashboard() {
     () => api<{ transactions: LedgerEntry[] }>("/transactions"),
     [],
   );
-  const active =
-    history.data?.readings.filter((item) =>
-      ["pending", "preflight", "connecting", "active", "ending"].includes(
-        item.status,
-      ),
-    ) ?? [];
-  const completed =
-    history.data?.readings.filter((item) =>
-      ["ended", "failed", "cancelled"].includes(item.status),
-    ) ?? [];
+  // ⚡ Bolt: Memoize filtered active/completed readings and aggregated financial metric
+  // to avoid redundant array iterations on unrelated state changes (e.g. modal toggle)
+  const active = useMemo(
+    () =>
+      history.data?.readings.filter((item) =>
+        ["pending", "preflight", "connecting", "active", "ending"].includes(
+          item.status,
+        ),
+      ) ?? [],
+    [history.data?.readings],
+  );
+  const completed = useMemo(
+    () =>
+      history.data?.readings.filter((item) =>
+        ["ended", "failed", "cancelled"].includes(item.status),
+      ) ?? [],
+    [history.data?.readings],
+  );
+  const totalInvested = useMemo(
+    () =>
+      history.data?.readings.reduce(
+        (sum, item) => sum + item.totalPrice,
+        0,
+      ) ?? 0,
+    [history.data?.readings],
+  );
   async function exportData() {
     const data = await api<Record<string, unknown>>("/auth/export");
     const url = URL.createObjectURL(
@@ -140,14 +156,7 @@ function ClientDashboard() {
         <article>
           <CircleDollarSign />
           <span>Total invested</span>
-          <strong>
-            {money(
-              history.data?.readings.reduce(
-                (sum, item) => sum + item.totalPrice,
-                0,
-              ) ?? 0,
-            )}
-          </strong>
+          <strong>{money(totalInvested)}</strong>
         </article>
         <article>
           <Star />
@@ -494,12 +503,19 @@ function ReaderDashboard() {
     }
   }
   const earnings = insights.data?.summary.historicalEarnings ?? 0;
-  const pending =
-    history.data?.readings.filter((r) => r.status === "pending") ?? [];
-  const completed =
-    history.data?.readings.filter((item) =>
-      ["ended", "failed", "cancelled"].includes(item.status),
-    ) ?? [];
+  // ⚡ Bolt: Memoize filtered pending/completed readings to prevent re-filtering
+  // on every form keystroke (e.g., when updating rates, bio, or notifications)
+  const pending = useMemo(
+    () => history.data?.readings.filter((r) => r.status === "pending") ?? [],
+    [history.data?.readings],
+  );
+  const completed = useMemo(
+    () =>
+      history.data?.readings.filter((item) =>
+        ["ended", "failed", "cancelled"].includes(item.status),
+      ) ?? [],
+    [history.data?.readings],
+  );
   return (
     <div className="page-shell dashboard">
       <DashboardHeader
