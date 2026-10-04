@@ -17,7 +17,15 @@ export function LoginPage() {
     sessionStorage.getItem(PENDING_VERIFICATION_EMAIL) ?? "";
   const [mode, setMode] = useState<
     "signin" | "signup" | "verify" | "forgot" | "profile"
-  >(pendingVerificationEmail ? "verify" : readerInvite ? "signup" : "signin");
+  >(
+    pendingVerificationEmail
+      ? "verify"
+      : readerInvite
+        ? "signup"
+        : params.get("forgot")
+          ? "forgot"
+          : "signin",
+  );
   const [form, setForm] = useState({
     email: pendingVerificationEmail,
     password: "",
@@ -31,7 +39,11 @@ export function LoginPage() {
   const [message, setMessage] = useState<{
     tone: "error" | "success";
     text: string;
-  } | null>(null);
+  } | null>(
+    params.get("reset") === "success"
+      ? { tone: "success", text: "Password updated. Sign in with your new password." }
+      : null,
+  );
   const returnTo = params.get("returnTo") || "/dashboard";
   useEffect(() => {
     if (!auth.needsProfile || mode === "verify") return;
@@ -117,7 +129,7 @@ export function LoginPage() {
       } else if (mode === "forgot") {
         const result = await authClient.requestPasswordReset({
           email: form.email,
-          redirectTo: `${window.location.origin}/login`,
+          redirectTo: `${window.location.origin}/reset-password`,
         });
         if (result.error) throw new Error(result.error.message);
         setMessage({

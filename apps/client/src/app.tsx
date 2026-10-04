@@ -28,6 +28,11 @@ const CommunityPage = lazy(() =>
 const LoginPage = lazy(() =>
   import("./pages/login").then((module) => ({ default: module.LoginPage })),
 );
+const ResetPasswordPage = lazy(() =>
+  import("./pages/reset-password").then((module) => ({
+    default: module.ResetPasswordPage,
+  })),
+);
 const DashboardPage = lazy(() =>
   import("./pages/dashboard").then((module) => ({
     default: module.DashboardPage,
@@ -72,6 +77,7 @@ export function App() {
                 <Route path="about" element={<AboutPage />} />
                 <Route path="community" element={<CommunityPage />} />
                 <Route path="login" element={<LoginPage />} />
+                <Route path="reset-password" element={<ResetPasswordPage />} />
                 <Route
                   path="dashboard"
                   element={
