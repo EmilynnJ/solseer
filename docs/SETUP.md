@@ -1,6 +1,6 @@
 # SoulSeer production setup
 
-SoulSeer is a three-service production deployment: Vercel serves the React client, Cloudflare runs the Worker, Durable Object, RealtimeKit integration, and R2 bucket, and Neon provides Auth and Postgres.
+SoulSeer is a three-service production deployment: a Render Static Site serves the React client (the former Vercel deployment was deleted), Cloudflare runs the Worker, Durable Object, RealtimeKit integration, and R2 bucket, and Neon provides Auth and Postgres.
 
 ## 1. Prerequisites
 
@@ -36,7 +36,9 @@ Run `npm install`, `npm run typecheck`, `npm test`, and `npm run build` from the
 3. Complete Connect platform settings, branding, support contact, and Express onboarding. Payouts remain manual and Admin-only for this launch.
 4. Test top-up success, duplicate webhook delivery, refund, Connect onboarding, payout threshold, transfer reversal, and webhook signature failure with Stripe test mode before enabling live keys.
 
-## 5. Vercel
+## 5. Frontend hosting (Render)
+
+The frontend now runs on the Render Static Site `solseer` with a `/*` → `/index.html` **Rewrite** rule. The Vercel instructions below are historical.
 
 Set every `VITE_` variable from `.env.example`. `VITE_API_ORIGIN` must be the production Worker origin without a trailing slash. Deploy from `apps/client`; its `vercel.json` includes SPA rewrites and defensive headers.
 

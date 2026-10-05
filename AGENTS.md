@@ -43,6 +43,13 @@ Intent auto-detection, hybrid ranking, session memory, auto-expanding budget.
 `run_pipeline` auto-queries all indexed repos. Use `repos: ["alias"]` to scope. Run `index_status` to see aliases.
 <!-- /vexp -->
 
+# SoulSeer deployment topology (verified 2026-10-05)
+
+- **Frontend (`apps/client`): Render Static Site `solseer`** (service `srv-db0t5tad0e5s73d3njeg`), branch `main`, publish dir `apps/client/dist`, custom domain `soul-seer.net`. SPA fallback is a Render Rewrite rule `/*` → `/index.html` (Action **Rewrite**, not Redirect).
+- **The Vercel deployment of the frontend has been deleted.** Do not deploy to, configure, or debug Vercel. `apps/client/vercel.json` and the `@vercel/analytics` import are leftovers and are not read by Render. Any Vercel status on a PR is not the production frontend.
+- **Backend (`apps/worker`): Cloudflare Worker `soulseer-api`** at `api.soul-seer.net`.
+- **Database and auth: Neon.** Application database is `soulseer_app` (not `neondb`).
+
 # 🚨 SOULSEER SOURCE-OF-TRUTH DEBUGGING RULE — READ BEFORE CHANGING CONFIG
 
 This rule exists because a production debugging loop repeatedly overrode verified current configuration with stale history and consumed days of work.
@@ -50,7 +57,7 @@ This rule exists because a production debugging loop repeatedly overrode verifie
 ## Non-negotiable hierarchy
 When debugging SoulSeer, evidence ranks in this order:
 
-1. **Current live provider/service configuration** (Cloudflare, Neon, Vercel, Stripe/test processor, etc.)
+1. **Current live provider/service configuration** (Cloudflare, Neon, Render, Stripe/test processor, etc.)
 2. **Current official vendor documentation for the exact product/API in use**
 3. **Current `main` branch and the exact deployed commit/version**
 4. **User-provided current screenshots/logs/verified names**
