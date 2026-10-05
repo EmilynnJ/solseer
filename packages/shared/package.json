@@ -11,13 +11,15 @@
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "drizzle-orm": "*",
     "zod": "*"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^5.0.3",
     "vitest": "^5.0.3"
   }
 }
