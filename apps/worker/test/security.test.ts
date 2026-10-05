@@ -4,21 +4,21 @@ import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { errorResponse } from "../src/lib/errors";
 import { uploadRoutes } from "../src/routes/uploads";
-import { downloadLimitedJson } from "../src/routes/webhooks";
+import { downloadChatExport } from "../src/routes/webhooks";
 import type { AppBindings } from "../src/types";
 
 describe("API security boundaries", () => {
   it("rejects untrusted domains and non-HTTPS protocols in chat download URLs (SSRF prevention)", async () => {
     await expect(
-      downloadLimitedJson("http://169.254.169.254/latest/meta-data", 1000),
+      downloadChatExport("http://169.254.169.254/latest/meta-data", 1000),
     ).rejects.toThrow("Chat download URL must use HTTPS.");
 
     await expect(
-      downloadLimitedJson("https://malicious-domain.com/chat.json", 1000),
+      downloadChatExport("https://malicious-domain.com/chat.json", 1000),
     ).rejects.toThrow("Chat download URL domain is not allowed.");
 
     await expect(
-      downloadLimitedJson("https://attacker.cloudflare.com.evil.com/chat.json", 1000),
+      downloadChatExport("https://attacker.cloudflare.com.evil.com/chat.json", 1000),
     ).rejects.toThrow("Chat download URL domain is not allowed.");
   });
 
@@ -31,7 +31,7 @@ describe("API security boundaries", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await downloadLimitedJson("https://cloudflare.com/chat.json", 1000);
+    await downloadChatExport("https://cloudflare.com/chat.json", 1000);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];

@@ -176,15 +176,22 @@ export function LoginPage() {
     } catch (cause) {
       // An expired or mismatched invitation can never succeed, so stop
       // sending it; the next submit creates an ordinary client profile.
+      const inviteConflict =
+        cause instanceof ApiError &&
+        cause.code === "PROFILE_CONFLICT" &&
+        Boolean(form.invite);
       const deadInvite =
-        cause instanceof ApiError && cause.code === "INVALID_READER_INVITE";
+        (cause instanceof ApiError && cause.code === "INVALID_READER_INVITE") ||
+        inviteConflict;
       if (deadInvite) {
         storeReaderInvite(null);
         setForm((current) => ({ ...current, invite: "" }));
       }
       setMessage({
         tone: "error",
-        text: deadInvite
+        text: inviteConflict
+          ? "The email or username on this Reader invitation is already in use. Ask SoulSeer for a new invitation, or submit again to join as a client."
+          : deadInvite
           ? "This Reader invitation is invalid, expired, or was sent to a different email. Ask SoulSeer for a new invitation, or submit again to join as a client."
           : cause instanceof Error
             ? cause.message

@@ -16,7 +16,11 @@ import { requireRole, requireUser } from "../lib/auth";
 import { createDatabase } from "../lib/db";
 import { AppError } from "../lib/errors";
 import { validateUuidParams } from "../lib/http";
-import { automatedFlagReason, scanContent } from "../lib/content-scan";
+import {
+  automatedFlagReason,
+  isReservedFlagReason,
+  scanContent,
+} from "../lib/content-scan";
 
 export const forumRoutes = new Hono<AppBindings>();
 
@@ -181,6 +185,8 @@ forumRoutes.post("/posts/:id/flag", requireUser, validateUuidParams("id"), async
     ...(await context.req.json()),
     postId: context.req.param("id"),
   });
+  if (isReservedFlagReason(input.reason))
+    throw new AppError(400, "RESERVED_REASON", "Please describe the problem in your own words.");
   const { db } = createDatabase(context.env.DATABASE_URL);
   const [flag] = await db
     .insert(forumFlags)
@@ -194,6 +200,8 @@ forumRoutes.post("/comments/:id/flag", requireUser, validateUuidParams("id"), as
     ...(await context.req.json()),
     commentId: context.req.param("id"),
   });
+  if (isReservedFlagReason(input.reason))
+    throw new AppError(400, "RESERVED_REASON", "Please describe the problem in your own words.");
   const { db } = createDatabase(context.env.DATABASE_URL);
   const [flag] = await db
     .insert(forumFlags)

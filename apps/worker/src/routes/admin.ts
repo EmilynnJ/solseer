@@ -26,6 +26,7 @@ import { createDatabase } from "../lib/db";
 import { AppError } from "../lib/errors";
 import { createStripe } from "../providers/stripe";
 import { validateUuidParams } from "../lib/http";
+import { assertNoLiveReading } from "../lib/account-status";
 
 const readerAdminUpdateSchema = z.object({
   fullName: z.string().trim().min(2).max(100).optional(),
@@ -37,7 +38,6 @@ const readerAdminUpdateSchema = z.object({
   verificationStatus: z
     .enum(["invited", "pending", "verified", "rejected"])
     .optional(),
-  status: z.enum(["active", "suspended"]).optional(),
 });
 
 const payoutRequestSchema = z.object({
@@ -95,6 +95,7 @@ adminRoutes.patch("/users/:id/status", validateUuidParams("id"), async (context)
     throw new AppError(400, "CANNOT_CHANGE_ADMIN", "Admin accounts can't be suspended here.");
   if (target.status === "deleted")
     throw new AppError(400, "USER_DELETED", "This account has been deleted.");
+  if (input.status === "suspended") await assertNoLiveReading(db, id);
   await db
     .update(users)
     .set({ status: input.status, updatedAt: new Date() })
@@ -120,6 +121,25 @@ adminRoutes.post("/readers", async (context) => {
   const input = createReaderSchema.parse(await context.req.json());
   const token = randomToken(48);
   const { db } = createDatabase(context.env.DATABASE_URL);
+  // accept_reader_invitation creates the user with the invitation's email and
+  // username, so an invite that collides with an existing account can never
+  // be accepted. Catch that here instead of at the Reader's signup.
+  const [existing] = await db
+    .select({ email: users.email, username: users.username })
+    .from(users)
+    .where(
+      sql`lower(${users.email}) = lower(${input.email}) OR lower(${users.username}) = lower(${input.username})`,
+    )
+    .limit(1);
+  if (existing) {
+    throw new AppError(
+      409,
+      "ACCOUNT_EXISTS",
+      existing.email.toLowerCase() === input.email.toLowerCase()
+        ? "An account with this email already exists. Remove or convert that account before inviting it as a Reader."
+        : "That username is already taken. Choose a different username for this Reader.",
+    );
+  }
   try {
     const [invitation] = await db
       .insert(readerInvitations)
@@ -213,7 +233,6 @@ adminRoutes.patch("/readers/:id", validateUuidParams("id"), async (context) => {
   const { db } = createDatabase(context.env.DATABASE_URL);
   const userChanges = {
     ...(input.fullName ? { fullName: input.fullName } : {}),
-    ...(input.status ? { status: input.status } : {}),
     updatedAt: new Date(),
   };
   const profileChanges = {

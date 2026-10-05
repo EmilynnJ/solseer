@@ -47,3 +47,8 @@ export function automatedFlagReason(matches: string[]): string | null {
     ? `${AUTOMATED_FLAG_PREFIX} ${matches.join("; ")}`
     : null;
 }
+
+// User reports may not claim to be automated detections.
+export function isReservedFlagReason(reason: string): boolean {
+  return reason.trim().toLowerCase().startsWith(AUTOMATED_FLAG_PREFIX.toLowerCase());
+}

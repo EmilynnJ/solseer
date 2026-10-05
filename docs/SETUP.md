@@ -1,6 +1,6 @@
 # SoulSeer production setup
 
-SoulSeer is a three-service production deployment: a Render Static Site serves the React client (the former Vercel deployment was deleted), Cloudflare runs the Worker, Durable Object, RealtimeKit integration, and R2 bucket, and Neon provides Auth and Postgres.
+SoulSeer is a three-service production deployment: a Render Static Site serves the React client, Cloudflare runs the Worker, Durable Object, RealtimeKit integration, and R2 bucket, and Neon provides Auth and Postgres.
 
 ## 1. Prerequisites
 
@@ -8,13 +8,13 @@ SoulSeer is a three-service production deployment: a Render Static Site serves t
 - A Neon project with separate development, staging, and production branches
 - A Cloudflare account with Workers Paid, R2, and RealtimeKit enabled
 - A Stripe account with Connect Express enabled
-- A Vercel project rooted at `apps/client`
+- A Render account (the frontend is a Render Static Site)
 
 Run `npm install`, `npm run typecheck`, `npm test`, and `npm run build` from the repository root.
 
 ## 2. Neon
 
-1. Enable Neon Auth on each branch. Enable email/password and Google OAuth. Add the exact Vercel origin and local origin to allowed origins and callback URLs.
+1. Enable Neon Auth on each branch. Enable email/password and Google OAuth. Add the exact production origin (`https://soul-seer.net`) and the local origin to allowed origins and callback URLs.
 2. Copy the branch-specific Auth URL, issuer, and JWKS URL. The browser gets only the Auth URL; issuer and JWKS stay in the Worker.
 3. Use a pooled server connection string for `DATABASE_URL`.
 4. Run `DATABASE_URL="..." npm run db:migrate` against development, then staging, then production. Never edit Neon Auth-owned schemas.
@@ -32,15 +32,23 @@ Run `npm install`, `npm run typecheck`, `npm test`, and `npm run build` from the
 ## 4. Stripe
 
 1. Add the production webhook endpoint `/api/webhooks/stripe` and subscribe to `payment_intent.succeeded`, `account.updated`, `transfer.created`, and `transfer.reversed`.
-2. Store the webhook signing secret and secret API key in Cloudflare secrets. Set only the publishable key in Vercel.
+2. Store the webhook signing secret and secret API key in Cloudflare secrets. Set only the publishable key as a `VITE_` environment variable on the Render Static Site.
 3. Complete Connect platform settings, branding, support contact, and Express onboarding. Payouts remain manual and Admin-only for this launch.
 4. Test top-up success, duplicate webhook delivery, refund, Connect onboarding, payout threshold, transfer reversal, and webhook signature failure with Stripe test mode before enabling live keys.
 
 ## 5. Frontend hosting (Render)
 
-The frontend now runs on the Render Static Site `solseer` with a `/*` → `/index.html` **Rewrite** rule. The Vercel instructions below are historical.
+The frontend is the Render Static Site `solseer`, deployed from the `main` branch.
 
-Set every `VITE_` variable from `.env.example`. `VITE_API_ORIGIN` must be the production Worker origin without a trailing slash. Deploy from `apps/client`; its `vercel.json` includes SPA rewrites and defensive headers.
+1. Root directory: blank (repository root).
+2. Build command: `npm ci && npm run build -w @soulseer/shared && npm run build -w @soulseer/client`
+3. Publish directory: `apps/client/dist`
+4. Environment: set every `VITE_` variable from `.env.example`. `VITE_API_ORIGIN` must be the production Worker origin (`https://api.soul-seer.net`) without a trailing slash. Never put server secrets in `VITE_` variables.
+5. Redirects/Rewrites: add one rule with Source `/*`, Destination `/index.html`, Action **Rewrite** (not Redirect). Render serves existing files such as `/assets/*` before applying the rule, so the app's routes load on a direct visit or refresh.
+6. Headers: add these for path `/*`: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(self), microphone=(self), geolocation=()`.
+7. Custom domain: `soul-seer.net`.
+
+`apps/client/vercel.json` is left over from the former Vercel deployment, which has been deleted; Render does not read it.
 
 ## 6. Seed the first Admin
 

@@ -63,3 +63,16 @@ it("drops an invitation the server rejects so the user is not stuck", async () =
   const retry = JSON.parse(api.mock.calls[1]?.[1].body ?? "{}") as { readerInviteToken?: string };
   expect(retry.readerInviteToken).toBeUndefined();
 });
+
+it("explains when the invitation's username or email is already taken", async () => {
+  const { ApiError } = await vi.importActual<typeof import("../lib/api")>("../lib/api");
+  api.mockRejectedValueOnce(new ApiError("That email or username is already in use.", 409, "PROFILE_CONFLICT"));
+  render(<MemoryRouter initialEntries={["/login?readerInvite=taken-invitation"]}><LoginPage /></MemoryRouter>);
+  cleanup();
+  authState.needsProfile = true;
+  render(<MemoryRouter initialEntries={["/login?complete=1"]}><LoginPage /></MemoryRouter>);
+  fireEvent.change(await screen.findByLabelText("Community username"), { target: { value: "someone" } });
+  fireEvent.click(screen.getByRole("button", { name: "Enter SoulSeer" }));
+  expect(await screen.findByText(/on this Reader invitation is already in use/)).toBeInTheDocument();
+  expect(localStorage.getItem("soulseer.pendingReaderInvite")).toBeNull();
+});

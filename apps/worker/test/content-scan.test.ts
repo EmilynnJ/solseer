@@ -26,3 +26,11 @@ describe("automated content scanning", () => {
     );
   });
 });
+
+describe("reserved report reasons", () => {
+  it("stops user reports from posing as automated scans", async () => {
+    const { isReservedFlagReason } = await import("../src/lib/content-scan");
+    expect(isReservedFlagReason("  automated SCAN: fake")).toBe(true);
+    expect(isReservedFlagReason("This post is spam")).toBe(false);
+  });
+});

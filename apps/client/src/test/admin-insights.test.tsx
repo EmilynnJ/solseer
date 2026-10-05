@@ -87,3 +87,24 @@ it("shows reported content and hides it with the author suspended", async () => 
   });
   expect(onChanged).toHaveBeenCalled();
 });
+
+it("pages through transcripts instead of silently stopping", async () => {
+  const row = (id: string) => ({
+    id, type: "chat", status: "ended", createdAt: "2026-10-01T10:00:00Z", durationSeconds: 60,
+    totalPrice: 500, messageCount: 3, clientName: `Client ${id}`, clientUsername: "c", readerName: "Reader", readerUsername: "r",
+  });
+  api.mockImplementation((path: string) =>
+    Promise.resolve(
+      path.includes("offset=0")
+        ? { transcripts: [row("a")], hasMore: true, nextOffset: 100 }
+        : { transcripts: [row("b")], hasMore: false, nextOffset: 200 },
+    ),
+  );
+  const { AdminTranscripts } = await import("../components/admin-insights");
+  render(<AdminTranscripts />);
+  expect(await screen.findByText("Client a")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Load more (showing 1)" }));
+  expect(await screen.findByText("Client b")).toBeInTheDocument();
+  expect(api).toHaveBeenLastCalledWith("/admin/transcripts?offset=100");
+  expect(screen.getByText("Showing all 2 matching transcripts.")).toBeInTheDocument();
+});

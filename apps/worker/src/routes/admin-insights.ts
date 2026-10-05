@@ -15,6 +15,7 @@ import { createDatabase } from "../lib/db";
 import { AppError } from "../lib/errors";
 import { validateUuidParams } from "../lib/http";
 import { AUTOMATED_FLAG_PREFIX } from "../lib/content-scan";
+import { assertNoLiveReading } from "../lib/account-status";
 
 export const adminInsightRoutes = new Hono<AppBindings>();
 adminInsightRoutes.use("*", requireUser, requireRole("admin"));
@@ -49,6 +50,8 @@ const rows = (result: { rows: unknown[] }) => result.rows as Row[];
 // ---------------------------------------------------------------------------
 // Transcripts
 
+const TRANSCRIPT_PAGE = 100;
+
 adminInsightRoutes.get("/transcripts", async (context) => {
   // Transcripts are searched across all time unless dates are given, so this
   // does not use rangeSchema's 30-day default or three-year cap.
@@ -57,6 +60,7 @@ adminInsightRoutes.get("/transcripts", async (context) => {
       q: z.string().trim().max(200).optional(),
       from: isoDate.optional(),
       to: isoDate.optional(),
+      offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
     })
     .parse(context.req.query());
   const start = query.from ? new Date(`${query.from}T00:00:00Z`) : new Date(0);
@@ -86,10 +90,15 @@ adminInsightRoutes.get("/transcripts", async (context) => {
               OR r.chat_transcript::text ILIKE ${search})`
           : sql``
       }
-    ORDER BY r.created_at DESC
-    LIMIT 200
+    ORDER BY r.created_at DESC, r.id
+    LIMIT ${TRANSCRIPT_PAGE + 1} OFFSET ${query.offset}
   `);
-  return context.json({ transcripts: rows(result) });
+  const found = rows(result);
+  return context.json({
+    transcripts: found.slice(0, TRANSCRIPT_PAGE),
+    hasMore: found.length > TRANSCRIPT_PAGE,
+    nextOffset: query.offset + TRANSCRIPT_PAGE,
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -152,6 +161,33 @@ adminInsightRoutes.patch(
       .limit(1);
     if (!flag) throw new AppError(404, "FLAG_NOT_FOUND", "Report not found.");
 
+    // Read everything first, then apply every change in one transaction so a
+    // failure can't leave content hidden with its report still open, etc.
+    const [content] = flag.postId
+      ? await db
+          .select({ authorId: forumPosts.authorId })
+          .from(forumPosts)
+          .where(eq(forumPosts.id, flag.postId))
+      : await db
+          .select({ authorId: forumComments.authorId })
+          .from(forumComments)
+          .where(eq(forumComments.id, flag.commentId as string));
+    const authorId = content?.authorId;
+    const [author] = authorId
+      ? await db
+          .select({ role: users.role, status: users.status })
+          .from(users)
+          .where(eq(users.id, authorId))
+      : [];
+    const suspend = Boolean(
+      input.suspendAuthor &&
+        authorId &&
+        authorId !== actor.id &&
+        author?.role !== "admin" &&
+        author?.status === "active",
+    );
+    if (suspend && authorId) await assertNoLiveReading(db, authorId);
+
     const contentStatus =
       input.action === "hide"
         ? "hidden"
@@ -160,78 +196,61 @@ adminInsightRoutes.patch(
           : input.action === "restore"
             ? "visible"
             : null;
-    let authorId: string | undefined;
-    if (flag.postId) {
-      const [post] = contentStatus
-        ? await db
-            .update(forumPosts)
-            .set({ status: contentStatus, updatedAt: new Date() })
-            .where(eq(forumPosts.id, flag.postId))
-            .returning({ authorId: forumPosts.authorId })
-        : await db
-            .select({ authorId: forumPosts.authorId })
-            .from(forumPosts)
-            .where(eq(forumPosts.id, flag.postId));
-      authorId = post?.authorId;
-    } else if (flag.commentId) {
-      const [comment] = contentStatus
-        ? await db
-            .update(forumComments)
-            .set({ status: contentStatus, updatedAt: new Date() })
-            .where(eq(forumComments.id, flag.commentId))
-            .returning({ authorId: forumComments.authorId })
-        : await db
-            .select({ authorId: forumComments.authorId })
-            .from(forumComments)
-            .where(eq(forumComments.id, flag.commentId));
-      authorId = comment?.authorId;
-    }
-
-    // Resolve every open report on the same content together.
-    const flagStatus =
+    const flagStatus: "dismissed" | "actioned" =
       input.action === "dismiss" || input.action === "restore"
         ? "dismissed"
         : "actioned";
-    await db
-      .update(forumFlags)
-      .set({ status: flagStatus, reviewedById: actor.id, reviewedAt: new Date() })
-      .where(
-        flag.postId
-          ? sql`${forumFlags.postId} = ${flag.postId} AND ${forumFlags.status} = 'open'`
-          : sql`${forumFlags.commentId} = ${flag.commentId} AND ${forumFlags.status} = 'open'`,
-      );
-    if (flag.status !== "open") {
-      await db
+    const now = new Date();
+    const review = { status: flagStatus, reviewedById: actor.id, reviewedAt: now };
+
+    await db.batch([
+      // Resolve this report and every other open report on the same content.
+      db
         .update(forumFlags)
-        .set({ status: flagStatus, reviewedById: actor.id, reviewedAt: new Date() })
-        .where(eq(forumFlags.id, flag.id));
-    }
-
-    let suspended = false;
-    if (input.suspendAuthor && authorId && authorId !== actor.id) {
-      const updated = await db
-        .update(users)
-        .set({ status: "suspended", updatedAt: new Date() })
-        .where(sql`${users.id} = ${authorId} AND ${users.role} <> 'admin' AND ${users.status} = 'active'`)
-        .returning({ id: users.id, role: users.role });
-      suspended = updated.length > 0;
-      if (updated[0]?.role === "reader") {
-        await db
-          .update(readerProfiles)
-          .set({ isOnline: false, updatedAt: new Date() })
-          .where(eq(readerProfiles.userId, authorId));
-      }
-    }
-
-    await db.insert(auditLogs).values({
-      actorId: actor.id,
-      action: `moderation.${input.action}`,
-      targetType: flag.postId ? "forum_post" : "forum_comment",
-      targetId: (flag.postId ?? flag.commentId) as string,
-      reason: input.note,
-      metadata: { flagId: flag.id, suspendedAuthor: suspended, authorId },
-    });
-    return context.json({ status: flagStatus, contentStatus, suspendedAuthor: suspended });
+        .set(review)
+        .where(
+          flag.postId
+            ? sql`${forumFlags.id} = ${flag.id} OR (${forumFlags.postId} = ${flag.postId} AND ${forumFlags.status} = 'open')`
+            : sql`${forumFlags.id} = ${flag.id} OR (${forumFlags.commentId} = ${flag.commentId} AND ${forumFlags.status} = 'open')`,
+        ),
+      ...(contentStatus && flag.postId
+        ? [
+            db
+              .update(forumPosts)
+              .set({ status: contentStatus, updatedAt: now })
+              .where(eq(forumPosts.id, flag.postId)),
+          ]
+        : []),
+      ...(contentStatus && flag.commentId
+        ? [
+            db
+              .update(forumComments)
+              .set({ status: contentStatus, updatedAt: now })
+              .where(eq(forumComments.id, flag.commentId)),
+          ]
+        : []),
+      ...(suspend && authorId
+        ? [
+            db
+              .update(users)
+              .set({ status: "suspended", updatedAt: now })
+              .where(eq(users.id, authorId)),
+            db
+              .update(readerProfiles)
+              .set({ isOnline: false, updatedAt: now })
+              .where(eq(readerProfiles.userId, authorId)),
+          ]
+        : []),
+      db.insert(auditLogs).values({
+        actorId: actor.id,
+        action: `moderation.${input.action}`,
+        targetType: flag.postId ? "forum_post" : "forum_comment",
+        targetId: (flag.postId ?? flag.commentId) as string,
+        reason: input.note,
+        metadata: { flagId: flag.id, suspendedAuthor: suspend, authorId },
+      }),
+    ]);
+    return context.json({ status: flagStatus, contentStatus, suspendedAuthor: suspend });
   },
 );
 
@@ -244,9 +263,13 @@ const revenueColumns = sql`
   coalesce(sum(amount) FILTER (WHERE type IN ('reader_earning', 'message_earning')), 0)::int AS "readerEarnings",
   coalesce(sum(amount) FILTER (WHERE type = 'refund'), 0)::int AS "refunds",
   coalesce(-sum(amount) FILTER (WHERE type = 'adjustment' AND reading_id IS NOT NULL), 0)::int AS "readerReversals",
-  coalesce(sum(amount) FILTER (WHERE type = 'adjustment' AND reading_id IS NULL), 0)::int AS "manualAdjustments",
+  coalesce(sum(amount) FILTER (WHERE type = 'adjustment' AND reading_id IS NULL
+    AND idempotency_key NOT LIKE 'payout-failed:%'), 0)::int AS "manualAdjustments",
   coalesce(sum(amount) FILTER (WHERE type = 'top_up'), 0)::int AS "topUps",
-  coalesce(-sum(amount) FILTER (WHERE type = 'payout'), 0)::int AS "payouts"
+  -- fail_reader_payout keeps the original payout entry and restores the money
+  -- with an adjustment keyed 'payout-failed:<id>', so net those out here.
+  coalesce(-sum(amount) FILTER (WHERE type = 'payout'
+    OR (type = 'adjustment' AND idempotency_key LIKE 'payout-failed:%')), 0)::int AS "payouts"
 `;
 
 adminInsightRoutes.get("/reports/revenue", async (context) => {
