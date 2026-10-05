@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import { desc, eq, sql } from "drizzle-orm";
+import { asc, desc, eq, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import {
   adminBalanceAdjustmentSchema,
@@ -28,7 +29,7 @@ import { validateUuidParams } from "../lib/http";
 
 const readerAdminUpdateSchema = z.object({
   fullName: z.string().trim().min(2).max(100).optional(),
-  bio: z.string().trim().min(1).max(4_000).optional(),
+  bio: z.string().trim().max(4_000).optional(),
   specialties: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
   pricingChat: z.number().int().min(100).max(100_000).optional(),
   pricingVoice: z.number().int().min(100).max(100_000).optional(),
@@ -68,6 +69,51 @@ adminRoutes.get("/users", async (context) => {
     .orderBy(desc(users.createdAt))
     .limit(500);
   return context.json({ users: rows });
+});
+
+const userStatusSchema = z.object({
+  status: z.enum(["active", "suspended"]),
+  reason: z.string().trim().max(500).optional(),
+});
+
+// Suspend or reactivate any client or Reader. Suspended accounts are rejected
+// by requireUser on every API call.
+adminRoutes.patch("/users/:id/status", validateUuidParams("id"), async (context) => {
+  const input = userStatusSchema.parse(await context.req.json());
+  const id = context.req.param("id");
+  const actor = context.get("user");
+  if (id === actor.id)
+    throw new AppError(400, "CANNOT_CHANGE_SELF", "You can't suspend your own account.");
+  const { db } = createDatabase(context.env.DATABASE_URL);
+  const [target] = await db
+    .select({ role: users.role, status: users.status })
+    .from(users)
+    .where(eq(users.id, id))
+    .limit(1);
+  if (!target) throw new AppError(404, "USER_NOT_FOUND", "User not found.");
+  if (target.role === "admin")
+    throw new AppError(400, "CANNOT_CHANGE_ADMIN", "Admin accounts can't be suspended here.");
+  if (target.status === "deleted")
+    throw new AppError(400, "USER_DELETED", "This account has been deleted.");
+  await db
+    .update(users)
+    .set({ status: input.status, updatedAt: new Date() })
+    .where(eq(users.id, id));
+  if (input.status === "suspended" && target.role === "reader") {
+    await db
+      .update(readerProfiles)
+      .set({ isOnline: false, updatedAt: new Date() })
+      .where(eq(readerProfiles.userId, id));
+  }
+  await db.insert(auditLogs).values({
+    actorId: actor.id,
+    action: input.status === "suspended" ? "user.suspend" : "user.reactivate",
+    targetType: "user",
+    targetId: id,
+    reason: input.reason,
+    metadata: { role: target.role },
+  });
+  return context.json({ id, status: input.status });
 });
 
 adminRoutes.post("/readers", async (context) => {
@@ -136,6 +182,30 @@ adminRoutes.post("/readers", async (context) => {
   }
 });
 
+adminRoutes.get("/readers", async (context) => {
+  const { db } = createDatabase(context.env.DATABASE_URL);
+  const rows = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      username: users.username,
+      fullName: users.fullName,
+      status: users.status,
+      bio: readerProfiles.bio,
+      specialties: readerProfiles.specialties,
+      pricingChat: readerProfiles.pricingChat,
+      pricingVoice: readerProfiles.pricingVoice,
+      pricingVideo: readerProfiles.pricingVideo,
+      verificationStatus: readerProfiles.verificationStatus,
+      hasImage: sql<boolean>`${readerProfiles.profileImageKey} IS NOT NULL`,
+    })
+    .from(readerProfiles)
+    .innerJoin(users, eq(users.id, readerProfiles.userId))
+    .orderBy(asc(users.fullName))
+    .limit(500);
+  return context.json({ readers: rows });
+});
+
 adminRoutes.patch("/readers/:id", validateUuidParams("id"), async (context) => {
   const input = readerAdminUpdateSchema.parse(await context.req.json());
   const id = context.req.param("id");
@@ -147,7 +217,7 @@ adminRoutes.patch("/readers/:id", validateUuidParams("id"), async (context) => {
     updatedAt: new Date(),
   };
   const profileChanges = {
-    ...(input.bio ? { bio: input.bio } : {}),
+    ...(input.bio !== undefined ? { bio: input.bio } : {}),
     ...(input.specialties ? { specialties: input.specialties } : {}),
     ...(input.pricingChat ? { pricingChat: input.pricingChat } : {}),
     ...(input.pricingVoice ? { pricingVoice: input.pricingVoice } : {}),
@@ -218,6 +288,9 @@ adminRoutes.post("/readers/:id/connect", validateUuidParams("id"), async (contex
   return context.json({ url: link.url, expiresAt: link.expires_at });
 });
 
+const readingClients = alias(users, "reading_clients");
+const readingReaders = alias(users, "reading_readers");
+
 adminRoutes.get("/readings", async (context) => {
   const { db } = createDatabase(context.env.DATABASE_URL);
   const rows = await db
@@ -227,6 +300,8 @@ adminRoutes.get("/readings", async (context) => {
       type: readingSessions.type,
       clientId: readingSessions.clientId,
       readerId: readingSessions.readerId,
+      clientName: readingClients.fullName,
+      readerName: readingReaders.fullName,
       durationSeconds: readingSessions.durationSeconds,
       totalPrice: readingSessions.totalPrice,
       paymentStatus: readingSessions.paymentStatus,
@@ -235,9 +310,84 @@ adminRoutes.get("/readings", async (context) => {
       eventCount: sql<number>`(select count(*)::int from ${readingEvents} e where e.reading_id = ${readingSessions.id})`,
     })
     .from(readingSessions)
+    .leftJoin(readingClients, eq(readingClients.id, readingSessions.clientId))
+    .leftJoin(readingReaders, eq(readingReaders.id, readingSessions.readerId))
     .orderBy(desc(readingSessions.createdAt))
     .limit(500);
   return context.json({ readings: rows });
+});
+
+// Admin-only record of a single reading for resolving disputes: who took part,
+// timing, billing, provider events and the saved chat transcript.
+adminRoutes.get("/readings/:id", validateUuidParams("id"), async (context) => {
+  const id = context.req.param("id");
+  const { db } = createDatabase(context.env.DATABASE_URL);
+  const [reading] = await db
+    .select({
+      id: readingSessions.id,
+      type: readingSessions.type,
+      status: readingSessions.status,
+      pricePerMinute: readingSessions.pricePerMinute,
+      createdAt: readingSessions.createdAt,
+      startedAt: readingSessions.startedAt,
+      completedAt: readingSessions.completedAt,
+      durationSeconds: readingSessions.durationSeconds,
+      totalPrice: readingSessions.totalPrice,
+      paymentStatus: readingSessions.paymentStatus,
+      failureReason: readingSessions.failureReason,
+      endedById: readingSessions.endedById,
+      chatTranscript: readingSessions.chatTranscript,
+      client: {
+        id: readingClients.id,
+        fullName: readingClients.fullName,
+        username: readingClients.username,
+        email: readingClients.email,
+      },
+      reader: {
+        id: readingReaders.id,
+        fullName: readingReaders.fullName,
+        username: readingReaders.username,
+        email: readingReaders.email,
+      },
+    })
+    .from(readingSessions)
+    .leftJoin(readingClients, eq(readingClients.id, readingSessions.clientId))
+    .leftJoin(readingReaders, eq(readingReaders.id, readingSessions.readerId))
+    .where(eq(readingSessions.id, id))
+    .limit(1);
+  if (!reading)
+    throw new AppError(404, "READING_NOT_FOUND", "Reading not found.");
+  const [events, ledger] = await Promise.all([
+    db
+      .select({
+        id: readingEvents.id,
+        eventType: readingEvents.eventType,
+        occurredAt: readingEvents.occurredAt,
+      })
+      .from(readingEvents)
+      .where(eq(readingEvents.readingId, id))
+      .orderBy(asc(readingEvents.occurredAt)),
+    db
+      .select({
+        id: walletLedgerEntries.id,
+        userId: walletLedgerEntries.userId,
+        type: walletLedgerEntries.type,
+        amount: walletLedgerEntries.amount,
+        reason: walletLedgerEntries.reason,
+        createdAt: walletLedgerEntries.createdAt,
+      })
+      .from(walletLedgerEntries)
+      .where(eq(walletLedgerEntries.readingId, id))
+      .orderBy(asc(walletLedgerEntries.createdAt)),
+  ]);
+  await db.insert(auditLogs).values({
+    actorId: context.get("user").id,
+    action: "reading.view_record",
+    targetType: "reading",
+    targetId: id,
+    metadata: {},
+  });
+  return context.json({ reading, events, ledger });
 });
 
 adminRoutes.get("/transactions", async (context) => {

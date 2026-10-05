@@ -31,7 +31,8 @@ export const readerPricingSchema = z.object({
 });
 
 export const readerProfileUpdateSchema = z.object({
-  bio: trimmedText(1, 4_000).optional(),
+  // Invited Readers may start with an empty bio and fill it in later.
+  bio: z.string().trim().max(4_000).optional(),
   specialties: z.array(trimmedText(1, 60)).max(20).optional(),
 });
 
@@ -82,8 +83,9 @@ export const createReaderSchema = z.object({
   email: z.string().trim().email().max(254),
   username: trimmedText(3, 40).regex(/^[a-zA-Z0-9_.-]+$/),
   fullName: trimmedText(2, 100),
-  bio: trimmedText(1, 4_000),
-  specialties: z.array(trimmedText(1, 60)).min(1).max(20),
+  // Readers can fill these in themselves after accepting the invitation.
+  bio: z.string().trim().max(4_000).default(""),
+  specialties: z.array(trimmedText(1, 60)).max(20).default([]),
   pricing: readerPricingSchema,
   verified: z.boolean().default(false),
 });

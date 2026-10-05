@@ -13,7 +13,6 @@ import {
   Check,
   CircleDollarSign,
   History,
-  ImageUp,
   Radio,
   Shield,
   Star,
@@ -21,10 +20,23 @@ import {
 } from "lucide-react";
 import { readerNotificationSettingsSchema, TOP_UP_PRESETS_CENTS } from "@soulseer/shared";
 import type { LedgerEntry, Reading } from "../types";
-import { API_ORIGIN, api, dateTime, duration, money } from "../lib/api";
+import { ApiError, api, dateTime, duration, money } from "../lib/api";
 import { useApiData } from "../hooks/use-api";
 import { useSoulAuth } from "../components/auth-context";
-import { authClient, getAccessToken } from "../lib/auth";
+import { ReaderImageUpload } from "../components/reader-image-upload";
+import {
+  AdminAnalytics,
+  AdminLedger,
+  AdminModeration,
+  AdminRevenue,
+  AdminTranscripts,
+} from "../components/admin-insights";
+import {
+  AdminReaderProfiles,
+  ReadingRecordModal,
+  type AdminReaderProfile,
+} from "../components/admin-records";
+import { authClient } from "../lib/auth";
 import { posthog } from "../lib/posthog";
 import {
   Button,
@@ -704,67 +716,6 @@ function ReaderDashboard() {
   );
 }
 
-function ReaderImageUpload({ onDone }: { onDone: () => void }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  async function choose(file?: File) {
-    if (!file) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const cap = await api<{ capability: string; signature: string }>(
-        "/uploads/reader-image/capability",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            fileName: file.name,
-            contentType: file.type,
-            size: file.size,
-          }),
-        },
-      );
-      const token = await getAccessToken();
-      if (!token) throw new Error("Please sign in again before uploading.");
-      const response = await fetch(`${API_ORIGIN}/api/uploads/reader-image`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": file.type,
-          "X-SoulSeer-Upload-Capability": cap.capability,
-          "X-SoulSeer-Upload-Signature": cap.signature,
-        },
-        body: file,
-      });
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as {
-          error?: { message?: string };
-        } | null;
-        throw new Error(payload?.error?.message ?? "Image upload failed.");
-      }
-      onDone();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Image upload failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <div>
-      <label className="upload-button">
-        <ImageUp /> {busy ? "Uploading…" : "Upload profile image"}
-        <input
-          type="file"
-          hidden
-          disabled={busy}
-          accept="image/jpeg,image/png,image/webp"
-          onChange={(e) => void choose(e.target.files?.[0])}
-        />
-      </label>
-      {error && <small role="alert">{error}</small>}
-    </div>
-  );
-}
-
 type AdminUser = {
   id: string;
   email: string;
@@ -784,6 +735,8 @@ type AdminReading = {
   type: string;
   clientId: string;
   readerId: string;
+  clientName: string | null;
+  readerName: string | null;
   durationSeconds: number;
   totalPrice: number;
   paymentStatus: string;
@@ -811,10 +764,11 @@ function AdminDashboard() {
     () => api<{ readings: AdminReading[] }>("/admin/readings"),
     [],
   );
-  const ledger = useApiData(
-    () => api<{ transactions: LedgerEntry[] }>("/admin/transactions"),
+  const readerProfiles = useApiData(
+    () => api<{ readers: AdminReaderProfile[] }>("/admin/readers"),
     [],
   );
+  const [openReading, setOpenReading] = useState<string | null>(null);
   const flags = useApiData(
     () => api<{ flags: AdminFlag[] }>("/admin/forum/flagged"),
     [],
@@ -851,9 +805,9 @@ function AdminDashboard() {
             .map((v) => v.trim())
             .filter(Boolean),
           pricing: {
-            chat: invite.chat * 100,
-            voice: invite.voice * 100,
-            video: invite.video * 100,
+            chat: Math.round(invite.chat * 100),
+            voice: Math.round(invite.voice * 100),
+            video: Math.round(invite.video * 100),
           },
         }),
       });
@@ -863,7 +817,8 @@ function AdminDashboard() {
       setNotice(`Reader invite created and copied: ${result.inviteUrl}`);
       await users.refresh();
     } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : "Invite failed.");
+      setNotice(`Invite failed: ${inviteErrorMessage(cause)}`);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }
   async function readerAction(
@@ -878,15 +833,41 @@ function AdminDashboard() {
       window.open(result.url, "_blank", "noopener");
       return;
     }
-    await api(`/admin/readers/${user.id}`, {
-      method: "PATCH",
-      body: JSON.stringify(
+    try {
+      if (action === "verify") {
+        await api(`/admin/readers/${user.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ verificationStatus: "verified" }),
+        });
+      } else {
+        if (
+          action === "suspend" &&
+          !window.confirm(
+            `Suspend ${user.fullName}? They will be signed out of everything until reactivated.`,
+          )
+        )
+          return;
+        await api(`/admin/users/${user.id}/status`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            status: action === "suspend" ? "suspended" : "active",
+          }),
+        });
+      }
+      setNotice(
         action === "verify"
-          ? { verificationStatus: "verified" }
-          : { status: action === "suspend" ? "suspended" : "active" },
-      ),
-    });
-    await users.refresh();
+          ? `${user.fullName} is verified.`
+          : action === "suspend"
+            ? `${user.fullName} is suspended.`
+            : `${user.fullName} is active again.`,
+      );
+      await Promise.all([users.refresh(), readerProfiles.refresh()]);
+    } catch (cause) {
+      setNotice(
+        `Action failed: ${cause instanceof Error ? cause.message : "please try again."}`,
+      );
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
   async function adjust(user: AdminUser) {
     const dollars = window.prompt(
@@ -969,9 +950,12 @@ function AdminDashboard() {
           "users",
           "readers",
           "readings",
+          "transcripts",
           "ledger",
+          "finance",
           "payouts",
           "moderation",
+          "analytics",
         ].map((item) => (
           <button
             className={tab === item ? "active" : ""}
@@ -998,7 +982,20 @@ function AdminDashboard() {
               <label key={k}>
                 {k.replace(/([A-Z])/g, " $1")}
                 <input
-                  required
+                  required={k !== "specialties"}
+                  placeholder={
+                    k === "specialties" ? "Optional – Reader can add later" : undefined
+                  }
+                  type={k === "email" ? "email" : "text"}
+                  {...(k === "username"
+                    ? {
+                        minLength: 3,
+                        maxLength: 40,
+                        pattern: "[A-Za-z0-9_.\\-]+",
+                        title:
+                          "3–40 letters, numbers, dots, dashes or underscores. No spaces or @.",
+                      }
+                    : {})}
                   value={invite[k as keyof typeof invite] as string}
                   onChange={(e) =>
                     setInvite({ ...invite, [k]: e.target.value })
@@ -1009,8 +1006,8 @@ function AdminDashboard() {
             <label className="wide">
               Bio
               <textarea
-                required
                 rows={4}
+                placeholder="Optional – Reader can add later"
                 value={invite.bio}
                 onChange={(e) => setInvite({ ...invite, bio: e.target.value })}
               />
@@ -1043,6 +1040,17 @@ function AdminDashboard() {
           </form>
         </DashboardSection>
       )}
+      {tab === "readers" && (
+        <DashboardSection icon={<Users />} title="Reader profiles">
+          <AdminReaderProfiles
+            readers={readerProfiles.data?.readers ?? []}
+            onSaved={async () => {
+              setNotice("Reader profile saved.");
+              await Promise.all([readerProfiles.refresh(), users.refresh()]);
+            }}
+          />
+        </DashboardSection>
+      )}
       {tab === "readings" && (
         <DashboardSection icon={<BookHeart />} title="All readings">
           <div className="table-scroll">
@@ -1050,6 +1058,8 @@ function AdminDashboard() {
               <thead>
                 <tr>
                   <th>Created</th>
+                  <th>Client</th>
+                  <th>Reader</th>
                   <th>Type</th>
                   <th>Status</th>
                   <th>Duration</th>
@@ -1063,6 +1073,8 @@ function AdminDashboard() {
                 {readings.data?.readings.map((r) => (
                   <tr key={r.id}>
                     <td>{dateTime(r.createdAt)}</td>
+                    <td>{r.clientName ?? "Deleted account"}</td>
+                    <td>{r.readerName ?? "Deleted account"}</td>
                     <td>{r.type}</td>
                     <td>
                       <span className={`status ${r.status}`}>{r.status}</span>
@@ -1071,7 +1083,14 @@ function AdminDashboard() {
                     <td>{money(r.totalPrice)}</td>
                     <td>{r.eventCount}</td>
                     <td>{r.failureReason ?? "—"}</td>
-                    <td>
+                    <td className="row-actions">
+                      <button
+                        onClick={() => {
+                          setOpenReading(r.id);
+                        }}
+                      >
+                        View record
+                      </button>
                       {r.status === "ended" &&
                         r.paymentStatus !== "refunded" && (
                           <button onClick={() => void refund(r)}>Refund</button>
@@ -1084,12 +1103,32 @@ function AdminDashboard() {
           </div>
         </DashboardSection>
       )}
+      {openReading && (
+        <ReadingRecordModal
+          readingId={openReading}
+          onClose={() => {
+            setOpenReading(null);
+          }}
+        />
+      )}
+      {tab === "transcripts" && (
+        <DashboardSection icon={<History />} title="Reading transcripts">
+          <AdminTranscripts />
+        </DashboardSection>
+      )}
       {tab === "ledger" && (
-        <DashboardSection
-          icon={<Banknote />}
-          title="Immutable transaction ledger"
-        >
-          <LedgerTable rows={ledger.data?.transactions ?? []} />
+        <DashboardSection icon={<Banknote />} title="Complete transaction history">
+          <AdminLedger />
+        </DashboardSection>
+      )}
+      {tab === "finance" && (
+        <DashboardSection icon={<CircleDollarSign />} title="Revenue report">
+          <AdminRevenue />
+        </DashboardSection>
+      )}
+      {tab === "analytics" && (
+        <DashboardSection icon={<Activity />} title="Analytics">
+          <AdminAnalytics />
         </DashboardSection>
       )}
       {tab === "payouts" && (
@@ -1129,51 +1168,12 @@ function AdminDashboard() {
         </DashboardSection>
       )}
       {tab === "moderation" && (
-        <DashboardSection icon={<Shield />} title="Flagged content">
-          <div className="request-list">
-            {flags.data?.flags.length ? (
-              flags.data.flags.map((f) => (
-                <article key={f.id}>
-                  <div>
-                    <strong>{f.reason}</strong>
-                    <small>
-                      {f.postId ? `Post ${f.postId}` : `Comment ${f.commentId}`}{" "}
-                      · {dateTime(f.createdAt)}
-                    </small>
-                  </div>
-                  <div className="row-actions">
-                    <Button
-                      className="secondary"
-                      onClick={async () => {
-                        await api(`/admin/forum/flags/${f.id}`, {
-                          method: "PATCH",
-                          body: JSON.stringify({ status: "dismissed" }),
-                        });
-                        await flags.refresh();
-                      }}
-                    >
-                      Dismiss
-                    </Button>
-                    <Button
-                      onClick={async () => {
-                        await api(`/admin/forum/flags/${f.id}`, {
-                          method: "PATCH",
-                          body: JSON.stringify({ status: "actioned" }),
-                        });
-                        await flags.refresh();
-                      }}
-                    >
-                      Actioned
-                    </Button>
-                  </div>
-                </article>
-              ))
-            ) : (
-              <Empty title="Moderation queue is clear">
-                There are no open community reports.
-              </Empty>
-            )}
-          </div>
+        <DashboardSection icon={<Shield />} title="Content review queue">
+          <AdminModeration
+            onChanged={async () => {
+              await Promise.all([flags.refresh(), users.refresh()]);
+            }}
+          />
         </DashboardSection>
       )}
     </div>
@@ -1230,15 +1230,16 @@ function AdminUsers({
                         Verify
                       </button>
                     )}
-                  {u.status === "active" ? (
-                    <button onClick={() => void onAction(u, "suspend")}>
-                      Suspend
-                    </button>
-                  ) : (
-                    <button onClick={() => void onAction(u, "activate")}>
-                      Reactivate
-                    </button>
-                  )}
+                  {u.role !== "admin" &&
+                    (u.status === "active" ? (
+                      <button onClick={() => void onAction(u, "suspend")}>
+                        Suspend
+                      </button>
+                    ) : u.status === "suspended" ? (
+                      <button onClick={() => void onAction(u, "activate")}>
+                        Reactivate
+                      </button>
+                    ) : null)}
                 </div>
               </td>
             </tr>
@@ -1361,4 +1362,28 @@ function LedgerTable({ rows }: { rows: LedgerEntry[] }) {
       </table>
     </div>
   );
+}
+
+const INVITE_FIELD_LABELS: Record<string, string> = {
+  email: "Email",
+  username: "Username (letters, numbers, . _ - only, no spaces or @)",
+  fullName: "Full name",
+  bio: "Bio",
+  specialties: "Specialties",
+  pricing: "Prices (at least $1/min)",
+};
+
+function inviteErrorMessage(cause: unknown) {
+  if (!(cause instanceof Error)) return "Please try again.";
+  const fieldErrors =
+    cause instanceof ApiError &&
+    typeof cause.details === "object" &&
+    cause.details !== null &&
+    "fieldErrors" in cause.details
+      ? (cause.details as { fieldErrors: Record<string, unknown> }).fieldErrors
+      : null;
+  const fields = fieldErrors ? Object.keys(fieldErrors) : [];
+  return fields.length
+    ? `check ${fields.map((f) => INVITE_FIELD_LABELS[f] ?? f).join(", ")}.`
+    : cause.message;
 }

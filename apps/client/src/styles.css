@@ -2316,3 +2316,236 @@ td small {
     flex-direction: column;
   }
 }
+
+.reading-record dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.4rem 1rem;
+  margin: 0 0 1.5rem;
+}
+.reading-record dt {
+  color: var(--muted, inherit);
+  opacity: 0.75;
+}
+.reading-record dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.reading-record h3 {
+  margin: 1.5rem 0 0.6rem;
+}
+.reading-record .transcript {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+.reading-record .transcript li {
+  border-left: 2px solid rgba(255, 105, 180, 0.35);
+  padding-left: 0.75rem;
+}
+.reading-record .transcript p {
+  margin: 0.2rem 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 560px) {
+  .reading-record dl {
+    grid-template-columns: 1fr;
+  }
+  .reading-record dd {
+    margin-bottom: 0.4rem;
+  }
+}
+
+.report-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+.report-filters label {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.report-filters label.grow {
+  flex: 1 1 16rem;
+}
+.report-filters label.check {
+  display: flex;
+  align-items: center;
+}
+.report-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+.report-tiles article {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 0.9rem 1rem;
+  display: grid;
+  gap: 0.25rem;
+}
+.report-tiles span,
+.report-tiles small {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.report-tiles strong {
+  font-size: 1.45rem;
+  color: var(--white);
+}
+.report-heading {
+  margin: 1.5rem 0 0.75rem;
+}
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: 1rem;
+}
+.bar-chart {
+  margin: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 1rem;
+}
+.bar-chart figcaption {
+  display: grid;
+  gap: 0.2rem;
+  margin-bottom: 0.5rem;
+}
+.bar-chart small,
+.bar-chart .readout {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.bar-chart .readout {
+  color: var(--white);
+}
+.bar-chart svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+.bar-chart .grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.bar-chart .tick {
+  fill: var(--muted);
+  font-size: 11px;
+}
+.bar-chart .hit {
+  fill: transparent;
+}
+.bar-chart g:focus {
+  outline: none;
+}
+.bar-chart g:focus .hit {
+  fill: rgba(255, 255, 255, 0.05);
+}
+.bar-chart .bar {
+  fill: var(--pink);
+}
+.bar-chart .bar.projected {
+  fill: var(--pink);
+  opacity: 0.4;
+}
+.bar-chart .bar.active {
+  fill: var(--pink-soft);
+}
+.table-view {
+  margin-top: 1rem;
+}
+.table-view summary {
+  cursor: pointer;
+  color: var(--muted);
+  margin-bottom: 0.75rem;
+}
+tr.projected td {
+  color: var(--muted);
+  font-style: italic;
+}
+.moderation-queue {
+  display: grid;
+  gap: 1rem;
+}
+.moderation-queue article {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 1rem 1.1rem;
+  display: grid;
+  gap: 0.6rem;
+}
+.moderation-queue header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+.moderation-queue small,
+.moderation-queue .author {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0;
+}
+.moderation-queue .reason {
+  margin: 0;
+}
+.moderation-queue blockquote {
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  border-left: 2px solid rgba(255, 105, 180, 0.4);
+  background: rgba(255, 255, 255, 0.03);
+  display: grid;
+  gap: 0.35rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+.moderation-queue .row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.badge {
+  font-size: 0.75rem;
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--line);
+}
+.badge.auto {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.badge.user {
+  border-color: var(--pink-soft);
+  color: var(--pink-soft);
+}
+
+.reader-photo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+.reader-photo img {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--line);
+}

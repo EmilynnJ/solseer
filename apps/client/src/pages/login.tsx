@@ -2,15 +2,36 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import { authClient } from "../lib/auth";
-import { api } from "../lib/api";
+import { ApiError, api } from "../lib/api";
 import { useSoulAuth } from "../components/auth-context";
 import { Button, Notice } from "../components/ui";
 
 const PENDING_VERIFICATION_EMAIL = "soulseer.pendingVerificationEmail";
+// Kept until the profile is created so a Reader who leaves mid-signup (or is
+// sent back to /login without the link's query string) still becomes a Reader.
+const PENDING_READER_INVITE = "soulseer.pendingReaderInvite";
+
+function storedReaderInvite() {
+  try {
+    return localStorage.getItem(PENDING_READER_INVITE) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function storeReaderInvite(token: string | null) {
+  try {
+    if (token) localStorage.setItem(PENDING_READER_INVITE, token);
+    else localStorage.removeItem(PENDING_READER_INVITE);
+  } catch {
+    // Storage can be unavailable (private mode); the URL still carries the invite.
+  }
+}
 
 export function LoginPage() {
   const [params] = useSearchParams();
-  const readerInvite = params.get("readerInvite") || params.get("invite") || "";
+  const linkInvite = params.get("readerInvite") || params.get("invite") || "";
+  const readerInvite = linkInvite || storedReaderInvite();
   const auth = useSoulAuth();
   const navigate = useNavigate();
   const pendingVerificationEmail =
@@ -20,7 +41,7 @@ export function LoginPage() {
   >(
     pendingVerificationEmail
       ? "verify"
-      : readerInvite
+      : linkInvite
         ? "signup"
         : params.get("forgot")
           ? "forgot"
@@ -45,6 +66,9 @@ export function LoginPage() {
       : null,
   );
   const returnTo = params.get("returnTo") || "/dashboard";
+  useEffect(() => {
+    if (linkInvite) storeReaderInvite(linkInvite);
+  }, [linkInvite]);
   useEffect(() => {
     if (!auth.needsProfile || mode === "verify") return;
     setMode("profile");
@@ -145,14 +169,24 @@ export function LoginPage() {
             ...(form.invite ? { readerInviteToken: form.invite } : {}),
           }),
         });
+        storeReaderInvite(null);
         await auth.refresh();
         navigate(returnTo);
       }
     } catch (cause) {
+      // An expired or mismatched invitation can never succeed, so stop
+      // sending it; the next submit creates an ordinary client profile.
+      const deadInvite =
+        cause instanceof ApiError && cause.code === "INVALID_READER_INVITE";
+      if (deadInvite) {
+        storeReaderInvite(null);
+        setForm((current) => ({ ...current, invite: "" }));
+      }
       setMessage({
         tone: "error",
-        text:
-          cause instanceof Error
+        text: deadInvite
+          ? "This Reader invitation is invalid, expired, or was sent to a different email. Ask SoulSeer for a new invitation, or submit again to join as a client."
+          : cause instanceof Error
             ? cause.message
             : "We couldn’t complete that request.",
       });

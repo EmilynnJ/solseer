@@ -16,6 +16,7 @@ import { requireRole, requireUser } from "../lib/auth";
 import { createDatabase } from "../lib/db";
 import { AppError } from "../lib/errors";
 import { validateUuidParams } from "../lib/http";
+import { automatedFlagReason, scanContent } from "../lib/content-scan";
 
 export const forumRoutes = new Hono<AppBindings>();
 
@@ -60,10 +61,25 @@ forumRoutes.post("/posts", requireUser, async (context) => {
     );
   }
   const { db } = createDatabase(context.env.DATABASE_URL);
-  const [post] = await db
+  const flagReason =
+    user.role !== "admin"
+      ? automatedFlagReason(scanContent(`${input.title}\n${input.body}`))
+      : null;
+  // The post and its automated flag are written in one transaction so a
+  // flagged post is never published without its report.
+  const id = crypto.randomUUID();
+  const insertPost = db
     .insert(forumPosts)
-    .values({ ...input, authorId: user.id })
+    .values({ id, ...input, authorId: user.id })
     .returning();
+  const [[post]] = flagReason
+    ? await db.batch([
+        insertPost,
+        db
+          .insert(forumFlags)
+          .values({ reporterId: user.id, postId: id, reason: flagReason }),
+      ])
+    : [await insertPost];
   return context.json({ post }, 201);
 });
 
@@ -139,10 +155,24 @@ forumRoutes.post("/posts/:id/comments", requireUser, validateUuidParams("id"), a
       );
     }
   }
-  const [comment] = await db
+  const user = context.get("user");
+  // Automated flags record the author as reporter because reporter_id is
+  // required; the "Automated scan:" reason prefix marks them in the queue.
+  const flagReason =
+    user.role !== "admin" ? automatedFlagReason(scanContent(input.body)) : null;
+  const id = crypto.randomUUID();
+  const insertComment = db
     .insert(forumComments)
-    .values({ postId, authorId: context.get("user").id, ...input })
+    .values({ id, postId, authorId: user.id, ...input })
     .returning();
+  const [[comment]] = flagReason
+    ? await db.batch([
+        insertComment,
+        db
+          .insert(forumFlags)
+          .values({ reporterId: user.id, commentId: id, reason: flagReason }),
+      ])
+    : [await insertComment];
   return context.json({ comment }, 201);
 });
 

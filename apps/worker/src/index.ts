@@ -10,6 +10,7 @@ import {
 } from "./lib/http";
 import { logger } from "./lib/log";
 import { adminRoutes } from "./routes/admin";
+import { adminInsightRoutes } from "./routes/admin-insights";
 import { authRoutes } from "./routes/auth";
 import { forumRoutes } from "./routes/forum";
 import { paymentRoutes } from "./routes/payments";
@@ -54,6 +55,7 @@ app.route("/api/payments", paymentRoutes);
 app.route("/api/messages", messageRoutes);
 app.route("/api/forum", forumRoutes);
 app.route("/api/admin", adminRoutes);
+app.route("/api/admin", adminInsightRoutes);
 app.route("/api/uploads", uploadRoutes);
 app.route("/api/user", userRoutes);
 app.route("/api/transactions", transactionRoutes);
