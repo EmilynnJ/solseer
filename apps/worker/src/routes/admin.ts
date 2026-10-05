@@ -197,6 +197,7 @@ adminRoutes.get("/readers", async (context) => {
       pricingVoice: readerProfiles.pricingVoice,
       pricingVideo: readerProfiles.pricingVideo,
       verificationStatus: readerProfiles.verificationStatus,
+      hasImage: sql<boolean>`${readerProfiles.profileImageKey} IS NOT NULL`,
     })
     .from(readerProfiles)
     .innerJoin(users, eq(users.id, readerProfiles.userId))

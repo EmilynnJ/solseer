@@ -2534,3 +2534,18 @@ tr.projected td {
   border-color: var(--pink-soft);
   color: var(--pink-soft);
 }
+
+.reader-photo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+.reader-photo img {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--line);
+}

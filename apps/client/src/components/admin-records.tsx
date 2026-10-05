@@ -1,5 +1,6 @@
 import { useEffect, useState, type SyntheticEvent } from "react";
-import { api, dateTime, duration, money } from "../lib/api";
+import { API_ORIGIN, api, dateTime, duration, money } from "../lib/api";
+import { ReaderImageUpload } from "./reader-image-upload";
 import { transcriptLine } from "../lib/transcript";
 import { Button, Empty, Loading, Modal, Notice } from "./ui";
 
@@ -15,6 +16,7 @@ export type AdminReaderProfile = {
   pricingVoice: number;
   pricingVideo: number;
   verificationStatus: string;
+  hasImage: boolean;
 };
 
 const VERIFICATION_STATUSES = ["invited", "pending", "verified", "rejected"];
@@ -100,6 +102,11 @@ function ReaderEditor({
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [photoVersion, setPhotoVersion] = useState<number | null>(null);
+  const hasPhoto = reader.hasImage || photoVersion !== null;
+  // The public image route only serves verified, active Readers.
+  const canPreview =
+    hasPhoto && reader.verificationStatus === "verified" && reader.status === "active";
 
   async function save(event: SyntheticEvent) {
     event.preventDefault();
@@ -133,6 +140,28 @@ function ReaderEditor({
   return (
     <Modal title={`Edit ${reader.fullName}`} onClose={onClose}>
       {error && <Notice tone="error">{error}</Notice>}
+      <div className="reader-photo">
+        {canPreview ? (
+          <img
+            src={`${API_ORIGIN}/api/readers/${reader.id}/image${
+              photoVersion ? `?v=${String(photoVersion)}` : ""
+            }`}
+            alt={`${reader.fullName} profile`}
+          />
+        ) : (
+          <span className="muted">
+            {hasPhoto
+              ? "Photo uploaded (preview shows once the Reader is verified and active)."
+              : "No profile photo yet."}
+          </span>
+        )}
+        <ReaderImageUpload
+          readerId={reader.id}
+          onDone={() => {
+            setPhotoVersion(Date.now());
+          }}
+        />
+      </div>
       <form
         className="admin-form"
         onSubmit={(event) => {
