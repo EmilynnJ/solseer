@@ -277,33 +277,6 @@ adminInsightRoutes.get("/reports/revenue", async (context) => {
   });
 });
 
-adminInsightRoutes.get("/reports/tax", async (context) => {
-  const { year } = z
-    .object({
-      year: z.coerce.number().int().min(2024).max(2100).default(new Date().getUTCFullYear()),
-    })
-    .parse(context.req.query());
-  const start = new Date(Date.UTC(year, 0, 1));
-  const endExclusive = new Date(Date.UTC(year + 1, 0, 1));
-  const { db } = createDatabase(context.env.DATABASE_URL);
-  const result = await db.execute(sql`
-    SELECT u.id, u.full_name AS "fullName", u.email, u.username,
-      rp.stripe_account_id IS NOT NULL AS "hasStripeAccount",
-      coalesce(sum(l.amount) FILTER (WHERE l.type IN ('reader_earning', 'message_earning')), 0)::int AS "grossEarnings",
-      coalesce(-sum(l.amount) FILTER (WHERE l.type = 'adjustment' AND l.reading_id IS NOT NULL), 0)::int AS "refundReversals",
-      coalesce(sum(l.amount) FILTER (WHERE l.type = 'adjustment' AND l.reading_id IS NULL), 0)::int AS "manualAdjustments",
-      coalesce(-sum(l.amount) FILTER (WHERE l.type = 'payout'), 0)::int AS "paidOut"
-    FROM users u
-    JOIN reader_profiles rp ON rp.user_id = u.id
-    LEFT JOIN wallet_ledger_entries l
-      ON l.user_id = u.id AND l.created_at >= ${start.toISOString()} AND l.created_at < ${endExclusive.toISOString()}
-    WHERE u.role = 'reader'
-    GROUP BY u.id, rp.stripe_account_id
-    ORDER BY "grossEarnings" DESC, u.full_name
-  `);
-  return context.json({ year, readers: rows(result) });
-});
-
 adminInsightRoutes.get("/ledger", async (context) => {
   const query = z
     .object({

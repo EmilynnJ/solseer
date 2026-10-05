@@ -29,7 +29,6 @@ import {
   AdminLedger,
   AdminModeration,
   AdminRevenue,
-  AdminTax,
   AdminTranscripts,
 } from "../components/admin-insights";
 import {
@@ -1123,14 +1122,9 @@ function AdminDashboard() {
         </DashboardSection>
       )}
       {tab === "finance" && (
-        <>
-          <DashboardSection icon={<CircleDollarSign />} title="Revenue report">
-            <AdminRevenue />
-          </DashboardSection>
-          <DashboardSection icon={<Banknote />} title="Reader earnings for taxes">
-            <AdminTax />
-          </DashboardSection>
-        </>
+        <DashboardSection icon={<CircleDollarSign />} title="Revenue report">
+          <AdminRevenue />
+        </DashboardSection>
       )}
       {tab === "analytics" && (
         <DashboardSection icon={<Activity />} title="Analytics">
