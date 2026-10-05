@@ -126,9 +126,16 @@ function ReaderEditor({
           pricingVoice: Math.round(form.voice * 100),
           pricingVideo: Math.round(form.video * 100),
           verificationStatus: form.verificationStatus,
-          status: form.status,
         }),
       });
+      // Suspension goes through the status endpoint, which also takes the
+      // Reader offline and records the change in the audit log.
+      if (form.status !== reader.status) {
+        await api(`/admin/users/${reader.id}/status`, {
+          method: "PATCH",
+          body: JSON.stringify({ status: form.status }),
+        });
+      }
       await onSaved();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Save failed.");

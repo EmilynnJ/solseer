@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import { authClient } from "../lib/auth";
-import { api } from "../lib/api";
+import { ApiError, api } from "../lib/api";
 import { useSoulAuth } from "../components/auth-context";
 import { Button, Notice } from "../components/ui";
 
@@ -174,10 +174,19 @@ export function LoginPage() {
         navigate(returnTo);
       }
     } catch (cause) {
+      // An expired or mismatched invitation can never succeed, so stop
+      // sending it; the next submit creates an ordinary client profile.
+      const deadInvite =
+        cause instanceof ApiError && cause.code === "INVALID_READER_INVITE";
+      if (deadInvite) {
+        storeReaderInvite(null);
+        setForm((current) => ({ ...current, invite: "" }));
+      }
       setMessage({
         tone: "error",
-        text:
-          cause instanceof Error
+        text: deadInvite
+          ? "This Reader invitation is invalid, expired, or was sent to a different email. Ask SoulSeer for a new invitation, or submit again to join as a client."
+          : cause instanceof Error
             ? cause.message
             : "We couldn’t complete that request.",
       });

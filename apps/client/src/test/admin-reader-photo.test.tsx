@@ -42,3 +42,37 @@ it("lets an Admin upload a profile photo for a specific Reader", async () => {
   );
   expect(await screen.findByText(/Photo uploaded/)).toBeInTheDocument();
 });
+
+it("suspends a Reader from the editor through the status endpoint", async () => {
+  api.mockResolvedValue({});
+  const onSaved = vi.fn().mockResolvedValue(undefined);
+  render(
+    <AdminReaderProfiles
+      onSaved={onSaved}
+      readers={[{
+        id: "22222222-2222-4222-8222-222222222222",
+        email: "reader@example.com",
+        username: "reader",
+        fullName: "Reader Name",
+        status: "active",
+        bio: "",
+        specialties: [],
+        pricingChat: 500,
+        pricingVoice: 700,
+        pricingVideo: 1000,
+        verificationStatus: "verified",
+        hasImage: false,
+      }]}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Edit profile" }));
+  fireEvent.change(screen.getByLabelText("Account"), { target: { value: "suspended" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
+  await waitFor(() => { expect(onSaved).toHaveBeenCalled(); });
+  const profileBody = JSON.parse((api.mock.calls[0]?.[1] as { body: string }).body) as Record<string, unknown>;
+  expect(profileBody.status).toBeUndefined();
+  expect(api.mock.calls[1]).toEqual([
+    "/admin/users/22222222-2222-4222-8222-222222222222/status",
+    { method: "PATCH", body: JSON.stringify({ status: "suspended" }) },
+  ]);
+});

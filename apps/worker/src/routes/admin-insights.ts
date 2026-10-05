@@ -50,13 +50,19 @@ const rows = (result: { rows: unknown[] }) => result.rows as Row[];
 // Transcripts
 
 adminInsightRoutes.get("/transcripts", async (context) => {
+  // Transcripts are searched across all time unless dates are given, so this
+  // does not use rangeSchema's 30-day default or three-year cap.
   const query = z
-    .object({ q: z.string().trim().max(200).optional() })
+    .object({
+      q: z.string().trim().max(200).optional(),
+      from: isoDate.optional(),
+      to: isoDate.optional(),
+    })
     .parse(context.req.query());
-  const { start, endExclusive } = rangeSchema.parse({
-    from: context.req.query("from") ?? "2000-01-01",
-    to: context.req.query("to"),
-  });
+  const start = query.from ? new Date(`${query.from}T00:00:00Z`) : new Date(0);
+  const endExclusive = query.to
+    ? new Date(new Date(`${query.to}T00:00:00Z`).getTime() + DAY_MS)
+    : new Date(Date.now() + DAY_MS);
   const { db } = createDatabase(context.env.DATABASE_URL);
   const search = query.q ? `%${query.q.replace(/[\\%_]/g, "\\$&")}%` : null;
   const result = await db.execute(sql`

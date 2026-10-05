@@ -832,7 +832,7 @@ export function AdminAnalytics() {
               { label: "Average reading length", value: duration(n(k.avgSeconds30d)) },
               { label: "Average reading value", value: money(n(k.avgReadingValue30d)) },
               {
-                label: "Average rating",
+                label: "Average rating (all time)",
                 value: k.reviewCount ? `${n(k.averageRating).toFixed(2)} ★` : "—",
                 note: `${String(n(k.reviewCount))} reviews · ${String(n(k.readersOnlineNow))} Readers online now`,
               },

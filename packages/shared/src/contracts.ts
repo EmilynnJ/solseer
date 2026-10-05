@@ -31,7 +31,8 @@ export const readerPricingSchema = z.object({
 });
 
 export const readerProfileUpdateSchema = z.object({
-  bio: trimmedText(1, 4_000).optional(),
+  // Invited Readers may start with an empty bio and fill it in later.
+  bio: z.string().trim().max(4_000).optional(),
   specialties: z.array(trimmedText(1, 60)).max(20).optional(),
 });
 

@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { createReaderSchema } from "@soulseer/shared";
+import { createReaderSchema, readerProfileUpdateSchema } from "@soulseer/shared";
 import { ReadingRecordModal } from "../components/admin-records";
 import { transcriptLine } from "../lib/transcript";
 
@@ -20,6 +20,8 @@ it("accepts a Reader invitation without a bio or specialties", () => {
   });
   expect(parsed.bio).toBe("");
   expect(parsed.specialties).toEqual([]);
+  // ...and the invited Reader can then save their profile with the bio still empty.
+  expect(readerProfileUpdateSchema.parse({ bio: "", specialties: ["Tarot"] })).toEqual({ bio: "", specialties: ["Tarot"] });
 });
 
 it("reads common RealtimeKit chat fields and keeps unknown entries visible", () => {
