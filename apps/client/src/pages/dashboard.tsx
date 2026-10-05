@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { readerNotificationSettingsSchema, TOP_UP_PRESETS_CENTS } from "@soulseer/shared";
 import type { LedgerEntry, Reading } from "../types";
-import { API_ORIGIN, api, dateTime, duration, money } from "../lib/api";
+import { API_ORIGIN, ApiError, api, dateTime, duration, money } from "../lib/api";
 import { useApiData } from "../hooks/use-api";
 import { useSoulAuth } from "../components/auth-context";
 import { authClient, getAccessToken } from "../lib/auth";
@@ -851,9 +851,9 @@ function AdminDashboard() {
             .map((v) => v.trim())
             .filter(Boolean),
           pricing: {
-            chat: invite.chat * 100,
-            voice: invite.voice * 100,
-            video: invite.video * 100,
+            chat: Math.round(invite.chat * 100),
+            voice: Math.round(invite.voice * 100),
+            video: Math.round(invite.video * 100),
           },
         }),
       });
@@ -863,7 +863,8 @@ function AdminDashboard() {
       setNotice(`Reader invite created and copied: ${result.inviteUrl}`);
       await users.refresh();
     } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : "Invite failed.");
+      setNotice(`Invite failed: ${inviteErrorMessage(cause)}`);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }
   async function readerAction(
@@ -999,6 +1000,16 @@ function AdminDashboard() {
                 {k.replace(/([A-Z])/g, " $1")}
                 <input
                   required
+                  type={k === "email" ? "email" : "text"}
+                  {...(k === "username"
+                    ? {
+                        minLength: 3,
+                        maxLength: 40,
+                        pattern: "[A-Za-z0-9_.\\-]+",
+                        title:
+                          "3–40 letters, numbers, dots, dashes or underscores. No spaces or @.",
+                      }
+                    : {})}
                   value={invite[k as keyof typeof invite] as string}
                   onChange={(e) =>
                     setInvite({ ...invite, [k]: e.target.value })
@@ -1361,4 +1372,28 @@ function LedgerTable({ rows }: { rows: LedgerEntry[] }) {
       </table>
     </div>
   );
+}
+
+const INVITE_FIELD_LABELS: Record<string, string> = {
+  email: "Email",
+  username: "Username (letters, numbers, . _ - only, no spaces or @)",
+  fullName: "Full name",
+  bio: "Bio",
+  specialties: "Specialties",
+  pricing: "Prices (at least $1/min)",
+};
+
+function inviteErrorMessage(cause: unknown) {
+  if (!(cause instanceof Error)) return "Please try again.";
+  const fieldErrors =
+    cause instanceof ApiError &&
+    typeof cause.details === "object" &&
+    cause.details !== null &&
+    "fieldErrors" in cause.details
+      ? (cause.details as { fieldErrors: Record<string, unknown> }).fieldErrors
+      : null;
+  const fields = fieldErrors ? Object.keys(fieldErrors) : [];
+  return fields.length
+    ? `check ${fields.map((f) => INVITE_FIELD_LABELS[f] ?? f).join(", ")}.`
+    : cause.message;
 }
