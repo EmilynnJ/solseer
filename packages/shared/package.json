@@ -14,10 +14,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "drizzle-orm": "latest",
-    "zod": "latest"
+    "drizzle-orm": "*",
+    "zod": "*"
   },
   "devDependencies": {
-    "vitest": "latest"
+    "vitest": "^5.0.3"
   }
 }
