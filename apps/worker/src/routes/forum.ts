@@ -16,6 +16,7 @@ import { requireRole, requireUser } from "../lib/auth";
 import { createDatabase } from "../lib/db";
 import { AppError } from "../lib/errors";
 import { validateUuidParams } from "../lib/http";
+import { automatedFlagReason, scanContent } from "../lib/content-scan";
 
 export const forumRoutes = new Hono<AppBindings>();
 
@@ -64,6 +65,15 @@ forumRoutes.post("/posts", requireUser, async (context) => {
     .insert(forumPosts)
     .values({ ...input, authorId: user.id })
     .returning();
+  const flagReason =
+    post && user.role !== "admin"
+      ? automatedFlagReason(scanContent(`${input.title}\n${input.body}`))
+      : null;
+  if (post && flagReason) {
+    await db
+      .insert(forumFlags)
+      .values({ reporterId: user.id, postId: post.id, reason: flagReason });
+  }
   return context.json({ post }, 201);
 });
 
@@ -143,6 +153,19 @@ forumRoutes.post("/posts/:id/comments", requireUser, validateUuidParams("id"), a
     .insert(forumComments)
     .values({ postId, authorId: context.get("user").id, ...input })
     .returning();
+  // Automated flags record the author as reporter because reporter_id is
+  // required; the "Automated scan:" reason prefix marks them in the queue.
+  const flagReason =
+    comment && context.get("user").role !== "admin"
+      ? automatedFlagReason(scanContent(input.body))
+      : null;
+  if (comment && flagReason) {
+    await db.insert(forumFlags).values({
+      reporterId: context.get("user").id,
+      commentId: comment.id,
+      reason: flagReason,
+    });
+  }
   return context.json({ comment }, 201);
 });
 

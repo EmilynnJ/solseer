@@ -25,6 +25,14 @@ import { API_ORIGIN, ApiError, api, dateTime, duration, money } from "../lib/api
 import { useApiData } from "../hooks/use-api";
 import { useSoulAuth } from "../components/auth-context";
 import {
+  AdminAnalytics,
+  AdminLedger,
+  AdminModeration,
+  AdminRevenue,
+  AdminTax,
+  AdminTranscripts,
+} from "../components/admin-insights";
+import {
   AdminReaderProfiles,
   ReadingRecordModal,
   type AdminReaderProfile,
@@ -823,10 +831,6 @@ function AdminDashboard() {
     [],
   );
   const [openReading, setOpenReading] = useState<string | null>(null);
-  const ledger = useApiData(
-    () => api<{ transactions: LedgerEntry[] }>("/admin/transactions"),
-    [],
-  );
   const flags = useApiData(
     () => api<{ flags: AdminFlag[] }>("/admin/forum/flagged"),
     [],
@@ -891,15 +895,41 @@ function AdminDashboard() {
       window.open(result.url, "_blank", "noopener");
       return;
     }
-    await api(`/admin/readers/${user.id}`, {
-      method: "PATCH",
-      body: JSON.stringify(
+    try {
+      if (action === "verify") {
+        await api(`/admin/readers/${user.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ verificationStatus: "verified" }),
+        });
+      } else {
+        if (
+          action === "suspend" &&
+          !window.confirm(
+            `Suspend ${user.fullName}? They will be signed out of everything until reactivated.`,
+          )
+        )
+          return;
+        await api(`/admin/users/${user.id}/status`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            status: action === "suspend" ? "suspended" : "active",
+          }),
+        });
+      }
+      setNotice(
         action === "verify"
-          ? { verificationStatus: "verified" }
-          : { status: action === "suspend" ? "suspended" : "active" },
-      ),
-    });
-    await users.refresh();
+          ? `${user.fullName} is verified.`
+          : action === "suspend"
+            ? `${user.fullName} is suspended.`
+            : `${user.fullName} is active again.`,
+      );
+      await Promise.all([users.refresh(), readerProfiles.refresh()]);
+    } catch (cause) {
+      setNotice(
+        `Action failed: ${cause instanceof Error ? cause.message : "please try again."}`,
+      );
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
   async function adjust(user: AdminUser) {
     const dollars = window.prompt(
@@ -982,9 +1012,12 @@ function AdminDashboard() {
           "users",
           "readers",
           "readings",
+          "transcripts",
           "ledger",
+          "finance",
           "payouts",
           "moderation",
+          "analytics",
         ].map((item) => (
           <button
             className={tab === item ? "active" : ""}
@@ -1140,12 +1173,29 @@ function AdminDashboard() {
           }}
         />
       )}
+      {tab === "transcripts" && (
+        <DashboardSection icon={<History />} title="Reading transcripts">
+          <AdminTranscripts />
+        </DashboardSection>
+      )}
       {tab === "ledger" && (
-        <DashboardSection
-          icon={<Banknote />}
-          title="Immutable transaction ledger"
-        >
-          <LedgerTable rows={ledger.data?.transactions ?? []} />
+        <DashboardSection icon={<Banknote />} title="Complete transaction history">
+          <AdminLedger />
+        </DashboardSection>
+      )}
+      {tab === "finance" && (
+        <>
+          <DashboardSection icon={<CircleDollarSign />} title="Revenue report">
+            <AdminRevenue />
+          </DashboardSection>
+          <DashboardSection icon={<Banknote />} title="Reader earnings for taxes">
+            <AdminTax />
+          </DashboardSection>
+        </>
+      )}
+      {tab === "analytics" && (
+        <DashboardSection icon={<Activity />} title="Analytics">
+          <AdminAnalytics />
         </DashboardSection>
       )}
       {tab === "payouts" && (
@@ -1185,51 +1235,12 @@ function AdminDashboard() {
         </DashboardSection>
       )}
       {tab === "moderation" && (
-        <DashboardSection icon={<Shield />} title="Flagged content">
-          <div className="request-list">
-            {flags.data?.flags.length ? (
-              flags.data.flags.map((f) => (
-                <article key={f.id}>
-                  <div>
-                    <strong>{f.reason}</strong>
-                    <small>
-                      {f.postId ? `Post ${f.postId}` : `Comment ${f.commentId}`}{" "}
-                      · {dateTime(f.createdAt)}
-                    </small>
-                  </div>
-                  <div className="row-actions">
-                    <Button
-                      className="secondary"
-                      onClick={async () => {
-                        await api(`/admin/forum/flags/${f.id}`, {
-                          method: "PATCH",
-                          body: JSON.stringify({ status: "dismissed" }),
-                        });
-                        await flags.refresh();
-                      }}
-                    >
-                      Dismiss
-                    </Button>
-                    <Button
-                      onClick={async () => {
-                        await api(`/admin/forum/flags/${f.id}`, {
-                          method: "PATCH",
-                          body: JSON.stringify({ status: "actioned" }),
-                        });
-                        await flags.refresh();
-                      }}
-                    >
-                      Actioned
-                    </Button>
-                  </div>
-                </article>
-              ))
-            ) : (
-              <Empty title="Moderation queue is clear">
-                There are no open community reports.
-              </Empty>
-            )}
-          </div>
+        <DashboardSection icon={<Shield />} title="Content review queue">
+          <AdminModeration
+            onChanged={async () => {
+              await Promise.all([flags.refresh(), users.refresh()]);
+            }}
+          />
         </DashboardSection>
       )}
     </div>
@@ -1286,15 +1297,16 @@ function AdminUsers({
                         Verify
                       </button>
                     )}
-                  {u.status === "active" ? (
-                    <button onClick={() => void onAction(u, "suspend")}>
-                      Suspend
-                    </button>
-                  ) : (
-                    <button onClick={() => void onAction(u, "activate")}>
-                      Reactivate
-                    </button>
-                  )}
+                  {u.role !== "admin" &&
+                    (u.status === "active" ? (
+                      <button onClick={() => void onAction(u, "suspend")}>
+                        Suspend
+                      </button>
+                    ) : u.status === "suspended" ? (
+                      <button onClick={() => void onAction(u, "activate")}>
+                        Reactivate
+                      </button>
+                    ) : null)}
                 </div>
               </td>
             </tr>

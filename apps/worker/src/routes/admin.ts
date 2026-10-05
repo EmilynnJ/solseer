@@ -71,6 +71,51 @@ adminRoutes.get("/users", async (context) => {
   return context.json({ users: rows });
 });
 
+const userStatusSchema = z.object({
+  status: z.enum(["active", "suspended"]),
+  reason: z.string().trim().max(500).optional(),
+});
+
+// Suspend or reactivate any client or Reader. Suspended accounts are rejected
+// by requireUser on every API call.
+adminRoutes.patch("/users/:id/status", validateUuidParams("id"), async (context) => {
+  const input = userStatusSchema.parse(await context.req.json());
+  const id = context.req.param("id");
+  const actor = context.get("user");
+  if (id === actor.id)
+    throw new AppError(400, "CANNOT_CHANGE_SELF", "You can't suspend your own account.");
+  const { db } = createDatabase(context.env.DATABASE_URL);
+  const [target] = await db
+    .select({ role: users.role, status: users.status })
+    .from(users)
+    .where(eq(users.id, id))
+    .limit(1);
+  if (!target) throw new AppError(404, "USER_NOT_FOUND", "User not found.");
+  if (target.role === "admin")
+    throw new AppError(400, "CANNOT_CHANGE_ADMIN", "Admin accounts can't be suspended here.");
+  if (target.status === "deleted")
+    throw new AppError(400, "USER_DELETED", "This account has been deleted.");
+  await db
+    .update(users)
+    .set({ status: input.status, updatedAt: new Date() })
+    .where(eq(users.id, id));
+  if (input.status === "suspended" && target.role === "reader") {
+    await db
+      .update(readerProfiles)
+      .set({ isOnline: false, updatedAt: new Date() })
+      .where(eq(readerProfiles.userId, id));
+  }
+  await db.insert(auditLogs).values({
+    actorId: actor.id,
+    action: input.status === "suspended" ? "user.suspend" : "user.reactivate",
+    targetType: "user",
+    targetId: id,
+    reason: input.reason,
+    metadata: { role: target.role },
+  });
+  return context.json({ id, status: input.status });
+});
+
 adminRoutes.post("/readers", async (context) => {
   const input = createReaderSchema.parse(await context.req.json());
   const token = randomToken(48);
