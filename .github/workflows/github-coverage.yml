@@ -1,4 +1,4 @@
-name: Code coverage
+name: Code Coverage
 
 on:
   push:
@@ -9,53 +9,65 @@ permissions:
   contents: read
 
 jobs:
-  coverage-typescript:
+  coverage:
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
+        uses: actions/checkout@v7
         with:
-          node-version: 22
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
           cache: npm
 
       - name: Install dependencies
         shell: bash
         run: npm ci
 
-      # apps/worker is intentionally excluded: its test suite cannot start in
-      # any environment today because the pinned `vitest` devDependency
-      # (^5.0.3) is incompatible with `@cloudflare/vitest-pool-workers`
-      # (0.20.3), which only supports vitest ^4.1.0. This is a pre-existing
-      # issue unrelated to coverage, so `apps/worker/vitest.config.ts` already
-      # has coverage configured (istanbul provider, cobertura reporter) for
-      # when that mismatch is resolved, but it is not run here.
-      - name: Run @soulseer/shared tests with coverage
+      - name: Test @soulseer/shared with coverage
         shell: bash
         continue-on-error: true
-        run: npm run test:coverage --workspace=@soulseer/shared
+        run: npm run test:coverage -w @soulseer/shared
 
-      - name: Run @soulseer/client tests with coverage
+      - name: Test @soulseer/client with coverage
         shell: bash
         continue-on-error: true
-        run: npm run test:coverage --workspace=@soulseer/client
+        run: npm run test:coverage -w @soulseer/client
 
-      - name: Upload coverage artifact
+      - name: Test @soulseer/worker with coverage
+        shell: bash
+        continue-on-error: true
+        run: npm run test:coverage -w @soulseer/worker
+
+      - name: Upload shared coverage artifact
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/upload-artifact@v7
         with:
-          name: coverage-report-typescript
-          path: |
-            packages/shared/coverage/cobertura-coverage.xml
-            apps/client/coverage/cobertura-coverage.xml
+          name: coverage-report-shared
+          path: packages/shared/coverage/cobertura-coverage.xml
 
-  upload-coverage-typescript:
-    needs: coverage-typescript
-    if: ${{ !cancelled() && needs.coverage-typescript.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+      - name: Upload client coverage artifact
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report-client
+          path: apps/client/coverage/cobertura-coverage.xml
+
+      - name: Upload worker coverage artifact
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report-worker
+          path: apps/worker/coverage/cobertura-coverage.xml
+
+  upload-coverage-shared:
+    needs: coverage
+    if: ${{ !cancelled() && needs.coverage.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -64,18 +76,48 @@ jobs:
       - name: Download coverage artifact
         uses: actions/download-artifact@v8
         with:
-          name: coverage-report-typescript
+          name: coverage-report-shared
 
-      - name: Upload @soulseer/shared coverage
-        uses: actions/upload-code-coverage@v1
+      - uses: actions/upload-code-coverage@v1
         with:
-          file: packages/shared/coverage/cobertura-coverage.xml
+          file: cobertura-coverage.xml
           language: TypeScript
-          label: code-coverage-agent
+          label: code-coverage-agent-shared
 
-      - name: Upload @soulseer/client coverage
-        uses: actions/upload-code-coverage@v1
+  upload-coverage-client:
+    needs: coverage
+    if: ${{ !cancelled() && needs.coverage.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      code-quality: write
+    steps:
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v8
         with:
-          file: apps/client/coverage/cobertura-coverage.xml
+          name: coverage-report-client
+
+      - uses: actions/upload-code-coverage@v1
+        with:
+          file: cobertura-coverage.xml
           language: TypeScript
-          label: code-coverage-agent
+          label: code-coverage-agent-client
+
+  upload-coverage-worker:
+    needs: coverage
+    if: ${{ !cancelled() && needs.coverage.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      code-quality: write
+    steps:
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: coverage-report-worker
+
+      - uses: actions/upload-code-coverage@v1
+        with:
+          file: cobertura-coverage.xml
+          language: TypeScript
+          label: code-coverage-agent-worker

@@ -10,7 +10,7 @@ export default defineConfig({
     setupFiles: "./src/test/setup.ts",
     coverage: {
       provider: "v8",
-      reporter: ["cobertura"],
+      reporter: ["text", "cobertura"],
       reportsDirectory: "./coverage",
       reportOnFailure: true,
     },

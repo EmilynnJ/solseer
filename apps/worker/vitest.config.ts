@@ -6,7 +6,7 @@ export default defineConfig({
   test: {
     coverage: {
       provider: "istanbul",
-      reporter: ["cobertura"],
+      reporter: ["text", "cobertura"],
       reportsDirectory: "./coverage",
       reportOnFailure: true,
     },
