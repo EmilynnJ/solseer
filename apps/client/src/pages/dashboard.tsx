@@ -24,6 +24,11 @@ import type { LedgerEntry, Reading } from "../types";
 import { API_ORIGIN, ApiError, api, dateTime, duration, money } from "../lib/api";
 import { useApiData } from "../hooks/use-api";
 import { useSoulAuth } from "../components/auth-context";
+import {
+  AdminReaderProfiles,
+  ReadingRecordModal,
+  type AdminReaderProfile,
+} from "../components/admin-records";
 import { authClient, getAccessToken } from "../lib/auth";
 import { posthog } from "../lib/posthog";
 import {
@@ -784,6 +789,8 @@ type AdminReading = {
   type: string;
   clientId: string;
   readerId: string;
+  clientName: string | null;
+  readerName: string | null;
   durationSeconds: number;
   totalPrice: number;
   paymentStatus: string;
@@ -811,6 +818,11 @@ function AdminDashboard() {
     () => api<{ readings: AdminReading[] }>("/admin/readings"),
     [],
   );
+  const readerProfiles = useApiData(
+    () => api<{ readers: AdminReaderProfile[] }>("/admin/readers"),
+    [],
+  );
+  const [openReading, setOpenReading] = useState<string | null>(null);
   const ledger = useApiData(
     () => api<{ transactions: LedgerEntry[] }>("/admin/transactions"),
     [],
@@ -999,7 +1011,10 @@ function AdminDashboard() {
               <label key={k}>
                 {k.replace(/([A-Z])/g, " $1")}
                 <input
-                  required
+                  required={k !== "specialties"}
+                  placeholder={
+                    k === "specialties" ? "Optional – Reader can add later" : undefined
+                  }
                   type={k === "email" ? "email" : "text"}
                   {...(k === "username"
                     ? {
@@ -1020,8 +1035,8 @@ function AdminDashboard() {
             <label className="wide">
               Bio
               <textarea
-                required
                 rows={4}
+                placeholder="Optional – Reader can add later"
                 value={invite.bio}
                 onChange={(e) => setInvite({ ...invite, bio: e.target.value })}
               />
@@ -1054,6 +1069,17 @@ function AdminDashboard() {
           </form>
         </DashboardSection>
       )}
+      {tab === "readers" && (
+        <DashboardSection icon={<Users />} title="Reader profiles">
+          <AdminReaderProfiles
+            readers={readerProfiles.data?.readers ?? []}
+            onSaved={async () => {
+              setNotice("Reader profile saved.");
+              await Promise.all([readerProfiles.refresh(), users.refresh()]);
+            }}
+          />
+        </DashboardSection>
+      )}
       {tab === "readings" && (
         <DashboardSection icon={<BookHeart />} title="All readings">
           <div className="table-scroll">
@@ -1061,6 +1087,8 @@ function AdminDashboard() {
               <thead>
                 <tr>
                   <th>Created</th>
+                  <th>Client</th>
+                  <th>Reader</th>
                   <th>Type</th>
                   <th>Status</th>
                   <th>Duration</th>
@@ -1074,6 +1102,8 @@ function AdminDashboard() {
                 {readings.data?.readings.map((r) => (
                   <tr key={r.id}>
                     <td>{dateTime(r.createdAt)}</td>
+                    <td>{r.clientName ?? "Deleted account"}</td>
+                    <td>{r.readerName ?? "Deleted account"}</td>
                     <td>{r.type}</td>
                     <td>
                       <span className={`status ${r.status}`}>{r.status}</span>
@@ -1082,7 +1112,14 @@ function AdminDashboard() {
                     <td>{money(r.totalPrice)}</td>
                     <td>{r.eventCount}</td>
                     <td>{r.failureReason ?? "—"}</td>
-                    <td>
+                    <td className="row-actions">
+                      <button
+                        onClick={() => {
+                          setOpenReading(r.id);
+                        }}
+                      >
+                        View record
+                      </button>
                       {r.status === "ended" &&
                         r.paymentStatus !== "refunded" && (
                           <button onClick={() => void refund(r)}>Refund</button>
@@ -1094,6 +1131,14 @@ function AdminDashboard() {
             </table>
           </div>
         </DashboardSection>
+      )}
+      {openReading && (
+        <ReadingRecordModal
+          readingId={openReading}
+          onClose={() => {
+            setOpenReading(null);
+          }}
+        />
       )}
       {tab === "ledger" && (
         <DashboardSection

@@ -2316,3 +2316,45 @@ td small {
     flex-direction: column;
   }
 }
+
+.reading-record dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.4rem 1rem;
+  margin: 0 0 1.5rem;
+}
+.reading-record dt {
+  color: var(--muted, inherit);
+  opacity: 0.75;
+}
+.reading-record dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.reading-record h3 {
+  margin: 1.5rem 0 0.6rem;
+}
+.reading-record .transcript {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+.reading-record .transcript li {
+  border-left: 2px solid rgba(255, 105, 180, 0.35);
+  padding-left: 0.75rem;
+}
+.reading-record .transcript p {
+  margin: 0.2rem 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 560px) {
+  .reading-record dl {
+    grid-template-columns: 1fr;
+  }
+  .reading-record dd {
+    margin-bottom: 0.4rem;
+  }
+}
