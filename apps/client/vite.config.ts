@@ -12,6 +12,7 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "cobertura"],
       reportsDirectory: "./coverage",
+      reportOnFailure: true,
     },
   },
 });

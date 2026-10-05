@@ -8,6 +8,7 @@ export default defineConfig({
       provider: "istanbul",
       reporter: ["text", "cobertura"],
       reportsDirectory: "./coverage",
+      reportOnFailure: true,
     },
   },
 });
