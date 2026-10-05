@@ -3,4 +3,12 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   plugins: [cloudflareTest({ wrangler: { configPath: "./wrangler.toml" } })],
+  test: {
+    coverage: {
+      provider: "istanbul",
+      reporter: ["cobertura"],
+      reportsDirectory: "./coverage",
+      reportOnFailure: true,
+    },
+  },
 });
