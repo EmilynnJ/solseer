@@ -91,7 +91,6 @@ declare class DOMException extends Error {
     readonly name: string;
     /**
      * The **`code`** read-only property of the DOMException interface returns one of the legacy error code constants, or `0` if none match.
-     * @deprecated
      *
      * [MDN Reference](https://developer.mozilla.org/docs/Web/API/DOMException/code)
      */
@@ -724,7 +723,6 @@ declare class Event {
     get defaultPrevented(): boolean;
     /**
      * The Event property **`returnValue`** indicates whether the default action for this event has been prevented or not.
-     * @deprecated
      *
      * [MDN Reference](https://developer.mozilla.org/docs/Web/API/Event/returnValue)
      */
@@ -743,7 +741,6 @@ declare class Event {
     get target(): EventTarget | undefined;
     /**
      * The deprecated **`Event.srcElement`** is an alias for the Event.target property.
-     * @deprecated
      *
      * [MDN Reference](https://developer.mozilla.org/docs/Web/API/Event/srcElement)
      */
@@ -762,14 +759,12 @@ declare class Event {
     get isTrusted(): boolean;
     /**
      * The **`cancelBubble`** property of the Event interface is deprecated.
-     * @deprecated
      *
      * [MDN Reference](https://developer.mozilla.org/docs/Web/API/Event/cancelBubble)
      */
     get cancelBubble(): boolean;
     /**
      * The **`cancelBubble`** property of the Event interface is deprecated.
-     * @deprecated
      *
      * [MDN Reference](https://developer.mozilla.org/docs/Web/API/Event/cancelBubble)
      */
@@ -4040,7 +4035,6 @@ type AiSearchInstanceInfo = {
     ai_search_model?: string;
     rewrite_model?: string;
     reranking_model?: string;
-    /** @deprecated Use index_method instead. */
     hybrid_search_enabled?: boolean;
     /** Controls which storage backends are active. */
     index_method?: {
@@ -4115,7 +4109,6 @@ type AiSearchConfig = {
     ai_search_model?: string;
     rewrite_model?: string;
     reranking_model?: string;
-    /** @deprecated Use index_method instead. */
     hybrid_search_enabled?: boolean;
     /** Controls which storage backends are used during indexing. Defaults to vector-only. */
     index_method?: {
@@ -10247,12 +10240,10 @@ declare abstract class Ai<AiModelList extends AiModelListType = AiModels> {
     aiGatewayLogId: string | null;
     gateway(gatewayId: string): AiGateway;
     /**
-     * @deprecated Use the standalone `ai_search_namespaces` or `ai_search` Workers bindings instead.
      * See https://developers.cloudflare.com/ai-search/usage/workers-binding/
      */
     aiSearch(): AiSearchNamespace;
     /**
-     * @deprecated AutoRAG has been replaced by AI Search.
      * Use the standalone `ai_search_namespaces` or `ai_search` Workers bindings instead.
      * See https://developers.cloudflare.com/ai-search/usage/workers-binding/
      *
@@ -10311,7 +10302,6 @@ type GatewayOptions = {
 };
 type UniversalGatewayOptions = Exclude<GatewayOptions, 'id'> & {
     /**
-     ** @deprecated
      */
     id?: string;
 };
@@ -10609,25 +10599,21 @@ interface Artifacts {
     delete(name: string): Promise<boolean>;
 }
 /**
- * @deprecated Use the standalone AI Search Workers binding instead.
  * See https://developers.cloudflare.com/ai-search/usage/workers-binding/
  */
 interface AutoRAGInternalError extends Error {
 }
 /**
- * @deprecated Use the standalone AI Search Workers binding instead.
  * See https://developers.cloudflare.com/ai-search/usage/workers-binding/
  */
 interface AutoRAGNotFoundError extends Error {
 }
 /**
- * @deprecated Use the standalone AI Search Workers binding instead.
  * See https://developers.cloudflare.com/ai-search/usage/workers-binding/
  */
 interface AutoRAGUnauthorizedError extends Error {
 }
 /**
- * @deprecated Use the standalone AI Search Workers binding instead.
  * See https://developers.cloudflare.com/ai-search/usage/workers-binding/
  */
 interface AutoRAGNameNotSetError extends Error {
@@ -10642,7 +10628,6 @@ type CompoundFilter = {
     filters: ComparisonFilter[];
 };
 /**
- * @deprecated Use the standalone AI Search Workers binding instead.
  * See https://developers.cloudflare.com/ai-search/usage/workers-binding/
  */
 type AutoRagSearchRequest = {
@@ -10660,7 +10645,6 @@ type AutoRagSearchRequest = {
     rewrite_query?: boolean;
 };
 /**
- * @deprecated Use the standalone AI Search Workers binding instead.
  * See https://developers.cloudflare.com/ai-search/usage/workers-binding/
  */
 type AutoRagAiSearchRequest = AutoRagSearchRequest & {
@@ -10668,14 +10652,12 @@ type AutoRagAiSearchRequest = AutoRagSearchRequest & {
     system_prompt?: string;
 };
 /**
- * @deprecated Use the standalone AI Search Workers binding instead.
  * See https://developers.cloudflare.com/ai-search/usage/workers-binding/
  */
 type AutoRagAiSearchRequestStreaming = Omit<AutoRagAiSearchRequest, 'stream'> & {
     stream: true;
 };
 /**
- * @deprecated Use the standalone AI Search Workers binding instead.
  * See https://developers.cloudflare.com/ai-search/usage/workers-binding/
  */
 type AutoRagSearchResponse = {
@@ -10695,7 +10677,6 @@ type AutoRagSearchResponse = {
     next_page: string | null;
 };
 /**
- * @deprecated Use the standalone AI Search Workers binding instead.
  * See https://developers.cloudflare.com/ai-search/usage/workers-binding/
  */
 type AutoRagListResponse = {
@@ -10708,39 +10689,32 @@ type AutoRagListResponse = {
     status: string;
 }[];
 /**
- * @deprecated Use the standalone AI Search Workers binding instead.
  * See https://developers.cloudflare.com/ai-search/usage/workers-binding/
  */
 type AutoRagAiSearchResponse = AutoRagSearchResponse & {
     response: string;
 };
 /**
- * @deprecated Use the standalone AI Search Workers binding instead.
  * See https://developers.cloudflare.com/ai-search/usage/workers-binding/
  */
 declare abstract class AutoRAG {
     /**
-     * @deprecated Use the standalone AI Search Workers binding instead.
      * See https://developers.cloudflare.com/ai-search/usage/workers-binding/
      */
     list(): Promise<AutoRagListResponse>;
     /**
-     * @deprecated Use the standalone AI Search Workers binding instead.
      * See https://developers.cloudflare.com/ai-search/usage/workers-binding/
      */
     search(params: AutoRagSearchRequest): Promise<AutoRagSearchResponse>;
     /**
-     * @deprecated Use the standalone AI Search Workers binding instead.
      * See https://developers.cloudflare.com/ai-search/usage/workers-binding/
      */
     aiSearch(params: AutoRagAiSearchRequestStreaming): Promise<Response>;
     /**
-     * @deprecated Use the standalone AI Search Workers binding instead.
      * See https://developers.cloudflare.com/ai-search/usage/workers-binding/
      */
     aiSearch(params: AutoRagAiSearchRequest): Promise<AutoRagAiSearchResponse>;
     /**
-     * @deprecated Use the standalone AI Search Workers binding instead.
      * See https://developers.cloudflare.com/ai-search/usage/workers-binding/
      */
     aiSearch(params: AutoRagAiSearchRequest): Promise<AutoRagAiSearchResponse | Response>;
@@ -11781,7 +11755,6 @@ interface IncomingRequestCfPropertiesBotManagement {
     /**
      * Duplicate of `botManagement.score`.
      *
-     * @deprecated
      */
     clientTrustScore: number;
 }
@@ -12166,7 +12139,6 @@ declare abstract class D1Database {
      */
     withSession(constraintOrBookmark?: D1SessionBookmark | D1SessionConstraint): D1DatabaseSession;
     /**
-     * @deprecated dump() will be removed soon, only applies to deprecated alpha v1 databases.
      */
     dump(): Promise<ArrayBuffer>;
 }
@@ -13207,7 +13179,6 @@ declare namespace CloudflareWorkersModule {
         ctx: WorkflowStepContext;
         error: Error;
         output: T | undefined;
-        /** @deprecated Use `ctx.step.name` and `ctx.step.count` instead. */
         stepName: string;
     };
     export type WorkflowRollbackHandler<T = unknown> = (ctx: WorkflowRollbackContext<T>) => Promise<void>;
