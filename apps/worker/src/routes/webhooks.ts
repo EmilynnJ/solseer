@@ -14,6 +14,7 @@ import { logger } from "../lib/log";
 import { verifyRealtimeKitSignature } from "../providers/realtimekit";
 import { constructStripeEvent, createStripe } from "../providers/stripe";
 import type { ReadingCoordinator } from "../durable/reading-coordinator";
+import { isAllowedChatExportHost, parseChatExport } from "../lib/chat-export";
 
 export const webhookRoutes = new Hono<AppBindings>();
 
@@ -229,14 +230,14 @@ webhookRoutes.post("/realtimekit", async (context) => {
     payload.event === "meeting.chatSynced" &&
     payload.chatDownloadUrl
   ) {
-    const transcript = await downloadLimitedJson(
+    const transcript = await downloadChatExport(
       payload.chatDownloadUrl,
       2 * 1024 * 1024,
     );
     await db
       .update(readingSessions)
       .set({
-        chatTranscript: Array.isArray(transcript) ? transcript : [transcript],
+        chatTranscript: transcript,
         updatedAt: new Date(),
       })
       .where(eq(readingSessions.id, reading.id));
@@ -267,25 +268,15 @@ function eventTime(payload: {
   return value ? new Date(value) : new Date();
 }
 
-export async function downloadLimitedJson(
+export async function downloadChatExport(
   url: string,
   maxBytes: number,
-): Promise<unknown> {
+): Promise<unknown[]> {
   const parsedUrl = new URL(url);
   if (parsedUrl.protocol !== "https:") {
     throw new Error("Chat download URL must use HTTPS.");
   }
-  const allowedDomains = [
-    "cloudflare.com",
-    "realtimekit.com",
-    "cloudflarestream.com",
-  ];
-  const isAllowed = allowedDomains.some(
-    (domain) =>
-      parsedUrl.hostname === domain ||
-      parsedUrl.hostname.endsWith(`.${domain}`),
-  );
-  if (!isAllowed) {
+  if (!isAllowedChatExportHost(parsedUrl.hostname)) {
     throw new Error("Chat download URL domain is not allowed.");
   }
 
@@ -317,5 +308,5 @@ export async function downloadLimitedJson(
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return JSON.parse(new TextDecoder().decode(bytes));
+  return parseChatExport(new TextDecoder().decode(bytes));
 }

@@ -96,6 +96,12 @@ function Tiles({ items }: { items: { label: string; value: string; note?: string
 // ---------------------------------------------------------------------------
 // Transcripts
 
+type TranscriptPage = {
+  transcripts: TranscriptRow[];
+  hasMore: boolean;
+  nextOffset: number;
+};
+
 type TranscriptRow = {
   id: string;
   type: string;
@@ -114,21 +120,47 @@ export function AdminTranscripts() {
   const [filters, setFilters] = useState({ q: "", from: "", to: "" });
   const [applied, setApplied] = useState(filters);
   const [open, setOpen] = useState<string | null>(null);
-  const load = useCallback(() => {
-    const params = new URLSearchParams();
-    if (applied.q) params.set("q", applied.q);
-    if (applied.from) params.set("from", applied.from);
-    if (applied.to) params.set("to", applied.to);
-    return api<{ transcripts: TranscriptRow[] }>(`/admin/transcripts?${params.toString()}`);
-  }, [applied]);
+  const [extra, setExtra] = useState<TranscriptPage | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState<string | null>(null);
+  const fetchPage = useCallback(
+    (offset: number) => {
+      const params = new URLSearchParams({ offset: String(offset) });
+      if (applied.q) params.set("q", applied.q);
+      if (applied.from) params.set("from", applied.from);
+      if (applied.to) params.set("to", applied.to);
+      return api<TranscriptPage>(`/admin/transcripts?${params.toString()}`);
+    },
+    [applied],
+  );
+  const load = useCallback(() => fetchPage(0), [fetchPage]);
   const report = useReport(load);
+  const rows = [...(report.data?.transcripts ?? []), ...(extra?.transcripts ?? [])];
+  const hasMore = extra ? extra.hasMore : Boolean(report.data?.hasMore);
+  async function loadMore() {
+    const offset = extra?.nextOffset ?? report.data?.nextOffset ?? 0;
+    setLoadingMore(true);
+    setMoreError(null);
+    try {
+      const page = await fetchPage(offset);
+      setExtra({
+        ...page,
+        transcripts: [...(extra?.transcripts ?? []), ...page.transcripts],
+      });
+    } catch (cause) {
+      setMoreError(errorText(cause));
+    } finally {
+      setLoadingMore(false);
+    }
+  }
   return (
     <>
       <form
         className="report-filters"
         onSubmit={(e) => {
           e.preventDefault();
-          setApplied(filters);
+          setExtra(null);
+          setApplied({ ...filters });
         }}
       >
         <label className="grow">
@@ -167,7 +199,8 @@ export function AdminTranscripts() {
       {report.error && <Notice tone="error">{report.error}</Notice>}
       {report.busy && !report.data && <Loading label="Loading transcripts…" />}
       {report.data &&
-        (report.data.transcripts.length ? (
+        (rows.length ? (
+          <>
           <div className="table-scroll">
             <table>
               <thead>
@@ -182,7 +215,7 @@ export function AdminTranscripts() {
                 </tr>
               </thead>
               <tbody>
-                {report.data.transcripts.map((row) => (
+                {rows.map((row) => (
                   <tr key={row.id}>
                     <td>{dateTime(row.createdAt)}</td>
                     <td>{row.clientName ?? "Deleted account"}</td>
@@ -204,6 +237,22 @@ export function AdminTranscripts() {
               </tbody>
             </table>
           </div>
+          {moreError && <Notice tone="error">{moreError}</Notice>}
+          {hasMore ? (
+            <Button
+              type="button"
+              className="secondary"
+              disabled={loadingMore}
+              onClick={() => void loadMore()}
+            >
+              {loadingMore ? "Loading…" : `Load more (showing ${String(rows.length)})`}
+            </Button>
+          ) : (
+            <p className="muted">
+              Showing all {rows.length} matching transcript{rows.length === 1 ? "" : "s"}.
+            </p>
+          )}
+          </>
         ) : (
           <Empty title="No transcripts found">
             Chat transcripts appear here after a chat reading ends and

@@ -1375,14 +1375,16 @@ const INVITE_FIELD_LABELS: Record<string, string> = {
 
 function inviteErrorMessage(cause: unknown) {
   if (!(cause instanceof Error)) return "Please try again.";
-  const fieldErrors =
-    cause instanceof ApiError &&
-    typeof cause.details === "object" &&
-    cause.details !== null &&
-    "fieldErrors" in cause.details
-      ? (cause.details as { fieldErrors: Record<string, unknown> }).fieldErrors
+  // The API returns zod's tree format ({ properties: { field: … } }); older
+  // deployments used the flattened format ({ fieldErrors: { field: … } }).
+  const details =
+    cause instanceof ApiError && typeof cause.details === "object" && cause.details !== null
+      ? (cause.details as {
+          properties?: Record<string, unknown>;
+          fieldErrors?: Record<string, unknown>;
+        })
       : null;
-  const fields = fieldErrors ? Object.keys(fieldErrors) : [];
+  const fields = Object.keys(details?.properties ?? details?.fieldErrors ?? {});
   return fields.length
     ? `check ${fields.map((f) => INVITE_FIELD_LABELS[f] ?? f).join(", ")}.`
     : cause.message;
