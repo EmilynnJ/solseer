@@ -18,7 +18,7 @@
     "@neondatabase/serverless": "*",
     "@soulseer/shared": "*",
     "drizzle-orm": "*",
-    "hono": "^4.13.0",
+    "hono": "^4.13.7",
     "jose": "*",
     "stripe": "*",
     "zod": "*"
@@ -34,7 +34,7 @@
     "globals": "*",
     "tsx": "*",
     "typescript-eslint": "*",
-    "vitest": "*",
+    "vitest": "^5.0.3",
     "wrangler": "^4.120.0"
   }
 }

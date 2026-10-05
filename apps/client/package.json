@@ -45,6 +45,6 @@
     "jsdom": "*",
     "typescript-eslint": "*",
     "vite": "*",
-    "vitest": "*"
+    "vitest": "^5.0.3"
   }
 }
