@@ -1,6 +1,5 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { inject } from "@vercel/analytics";
 import "@fontsource/alex-brush";
 import "@fontsource/playfair-display/400.css";
 import "@fontsource/playfair-display/600.css";
@@ -12,9 +11,10 @@ import "./reading-reentry.css";
 import { App } from "./app";
 import "./lib/posthog";
 
-inject();
+const root = document.getElementById("root");
+if (!root) throw new Error("The SoulSeer root element is missing.");
 
-createRoot(document.getElementById("root")!).render(
+createRoot(root).render(
   <StrictMode>
     <App />
   </StrictMode>,

@@ -48,7 +48,20 @@ The frontend is the Render Static Site `solseer`, deployed from the `main` branc
 6. Headers: add these for path `/*`: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(self), microphone=(self), geolocation=()`.
 7. Custom domain: `soul-seer.net`.
 
-`apps/client/vercel.json` is left over from the former Vercel deployment, which has been deleted; Render does not read it.
+The former Vercel deployment, client configuration, and analytics integration have been removed. Manage frontend rewrites and headers in Render.
+
+### Diagnosing sign-in database errors
+
+`VITE_NEON_AUTH_URL` identifies the database used by Neon Auth. The Worker's
+`DATABASE_URL` identifies the application database; they do not have to be the
+same database. If Neon Auth reports "Database is unavailable or has been
+deleted", inspect the current production branch's Auth configuration and database
+availability. Copy the verified Auth URL into Render and rebuild the client if
+it differs from the deployed URL. Keep the Worker's verified issuer and JWKS
+configuration aligned with that same Auth service. Do not substitute an
+application database name into an Auth URL or recreate the auth database to
+silence the error; existing users and sessions belong to the configured Auth
+database.
 
 ## 6. Seed the first Admin
 

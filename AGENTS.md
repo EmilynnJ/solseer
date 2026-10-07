@@ -46,7 +46,7 @@ Intent auto-detection, hybrid ranking, session memory, auto-expanding budget.
 # SoulSeer deployment topology (verified 2026-10-05)
 
 - **Frontend (`apps/client`): Render Static Site `solseer`** (service `srv-db0t5tad0e5s73d3njeg`), branch `main`, publish dir `apps/client/dist`, custom domain `soul-seer.net`. SPA fallback is a Render Rewrite rule `/*` → `/index.html` (Action **Rewrite**, not Redirect).
-- **The Vercel deployment of the frontend has been deleted.** Do not deploy to, configure, or debug Vercel. `apps/client/vercel.json` and the `@vercel/analytics` import are leftovers and are not read by Render. Any Vercel status on a PR is not the production frontend.
+- **The Vercel deployment of the frontend has been deleted.** Do not deploy to, configure, or debug Vercel. Its client configuration and analytics integration have been removed. Any Vercel status on a PR is not the production frontend.
 - **Backend (`apps/worker`): Cloudflare Worker `soulseer-api`** at `api.soul-seer.net`.
 - **Database and auth: Neon.** Application database is `soulseer_app` (not `neondb`).
 

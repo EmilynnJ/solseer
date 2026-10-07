@@ -21,7 +21,6 @@
     "@soulseer/shared": "*",
     "@stripe/react-stripe-js": "*",
     "@stripe/stripe-js": "*",
-    "@vercel/analytics": "^2.0.1",
     "dompurify": "^3.4.16",
     "html-react-parser": "^6.1.7",
     "lucide-react": "*",

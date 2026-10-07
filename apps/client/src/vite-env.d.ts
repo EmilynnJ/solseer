@@ -8,6 +8,8 @@ interface ImportMetaEnv {
   readonly VITE_STRIPE_PUBLISHABLE_KEY: string;
   readonly VITE_FACEBOOK_GROUP_URL: string;
   readonly VITE_DISCORD_INVITE_URL: string;
+  readonly VITE_SUPPORT_EMAIL?: string;
+  readonly VITE_PRIVACY_EMAIL?: string;
 }
 
 interface ImportMeta {
