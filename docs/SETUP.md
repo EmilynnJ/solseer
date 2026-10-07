@@ -14,6 +14,19 @@ Run `npm install`, `npm run typecheck`, `npm test`, and `npm run build` from the
 
 ## 2. Neon
 
+Production database roles verified after the 2026-10-07 restore:
+
+- `soulseer_app`: application data used by the Cloudflare Worker.
+- `neondb`: Neon Auth's database. Keep it even if its application tables look empty.
+- Client `VITE_NEON_AUTH_URL` and Worker `NEON_AUTH_ISSUER`:
+  `https://ep-still-mud-aj5bg4yw.neonauth.c-3.us-east-2.aws.neon.tech/neondb/auth`
+- Worker `NEON_AUTH_JWKS_URL`: the same URL with `/.well-known/jwks.json` appended.
+
+The restore preserved these URLs. The deployed frontend and live Worker settings
+were checked against them; no auth URL change was needed. Vite reads the client's
+value at build time from Render's environment. The Worker production defaults are
+in `apps/worker/wrangler.toml`.
+
 1. Enable Neon Auth on each branch. Enable email/password and Google OAuth. Add the exact production origin (`https://soul-seer.net`) and the local origin to allowed origins and callback URLs.
 2. Copy the branch-specific Auth URL, issuer, and JWKS URL. The browser gets only the Auth URL; issuer and JWKS stay in the Worker.
 3. Use a pooled server connection string for `DATABASE_URL`.

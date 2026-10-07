@@ -48,7 +48,7 @@ Intent auto-detection, hybrid ranking, session memory, auto-expanding budget.
 - **Frontend (`apps/client`): Render Static Site `solseer`** (service `srv-db0t5tad0e5s73d3njeg`), branch `main`, publish dir `apps/client/dist`, custom domain `soul-seer.net`. SPA fallback is a Render Rewrite rule `/*` → `/index.html` (Action **Rewrite**, not Redirect).
 - **The Vercel deployment of the frontend has been deleted.** Do not deploy to, configure, or debug Vercel. Its client configuration and analytics integration have been removed. Any Vercel status on a PR is not the production frontend.
 - **Backend (`apps/worker`): Cloudflare Worker `soulseer-api`** at `api.soul-seer.net`.
-- **Database and auth: Neon.** Application database is `soulseer_app` (not `neondb`).
+- **Database and auth: Neon.** Application database is `soulseer_app`. Neon Auth uses the separate `neondb` database, restored and verified on 2026-10-07. Both are in use; an empty application schema in `neondb` does not make that auth database disposable. The verified Auth URL is `https://ep-still-mud-aj5bg4yw.neonauth.c-3.us-east-2.aws.neon.tech/neondb/auth`; the client uses it through `VITE_NEON_AUTH_URL`, and the Worker's production issuer/JWKS settings in `wrangler.toml` match it.
 
 # 🚨 SOULSEER SOURCE-OF-TRUTH DEBUGGING RULE — READ BEFORE CHANGING CONFIG
 
