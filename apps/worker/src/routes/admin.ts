@@ -44,6 +44,12 @@ const payoutRequestSchema = z.object({
   idempotencyKey: z.string().min(8).max(200),
 });
 
+const provisionReaderSchema = z.object({
+  neonAuthUserId: z.string().trim().min(1).max(255),
+  email: z.string().trim().email().max(254),
+  fullName: z.string().trim().min(2).max(100),
+});
+
 export const adminRoutes = new Hono<AppBindings>();
 adminRoutes.use("*", requireUser, requireRole("admin"));
 
@@ -117,13 +123,84 @@ adminRoutes.patch("/users/:id/status", validateUuidParams("id"), async (context)
   return context.json({ id, status: input.status });
 });
 
+adminRoutes.post("/readers/provision", async (context) => {
+  const input = provisionReaderSchema.parse(await context.req.json());
+  const username = `reader_${randomToken(9)}`;
+  const { sql: neonSql } = createDatabase(context.env.DATABASE_URL);
+  try {
+    const result = await neonSql`
+      WITH new_user AS (
+        INSERT INTO public.users (neon_auth_user_id, email, username, full_name, role)
+        VALUES (
+          ${input.neonAuthUserId},
+          ${input.email.toLowerCase()},
+          ${username},
+          ${input.fullName},
+          'reader'
+        )
+        RETURNING id
+      ), new_reader_profile AS (
+        INSERT INTO public.reader_profiles (
+          user_id, verification_status, pricing_chat, pricing_voice, pricing_video
+        )
+        SELECT id, 'pending', 500, 700, 1000 FROM new_user
+        RETURNING user_id
+      ), new_wallet AS (
+        INSERT INTO public.wallets (user_id)
+        SELECT id FROM new_user
+        RETURNING user_id
+      ), new_pending_payout AS (
+        INSERT INTO public.pending_payouts (reader_id)
+        SELECT id FROM new_user
+        RETURNING reader_id
+      ), new_audit_log AS (
+        INSERT INTO public.audit_logs (actor_id, action, target_type, target_id, metadata)
+        SELECT
+          ${context.get("user").id}::uuid,
+          'reader.provision',
+          'user',
+          id::text,
+          jsonb_build_object('email', ${input.email.toLowerCase()}, 'username', ${username})
+        FROM new_user
+        RETURNING id
+      )
+      SELECT id AS user_id FROM new_user
+    `;
+    const userId = result.rows[0]?.user_id;
+    if (typeof userId !== "string") {
+      throw new AppError(
+        500,
+        "READER_SETUP_FAILED",
+        "The Reader account could not be set up.",
+      );
+    }
+    return context.json({ userId, username }, 201);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("users_email_lower_uidx")) {
+      throw new AppError(
+        409,
+        "ACCOUNT_EXISTS",
+        "An account with this email already exists in SoulSeer.",
+      );
+    }
+    if (message.includes("users_neon_auth_user_id_uidx")) {
+      throw new AppError(
+        409,
+        "IDENTITY_EXISTS",
+        "This login is already connected to a SoulSeer account.",
+      );
+    }
+    throw error;
+  }
+});
+
+// Keep already-issued Reader invitation links and older clients working while
+// the new account-provisioning workflow rolls out.
 adminRoutes.post("/readers", async (context) => {
   const input = createReaderSchema.parse(await context.req.json());
   const token = randomToken(48);
   const { db } = createDatabase(context.env.DATABASE_URL);
-  // accept_reader_invitation creates the user with the invitation's email and
-  // username, so an invite that collides with an existing account can never
-  // be accepted. Catch that here instead of at the Reader's signup.
   const [existing] = await db
     .select({ email: users.email, username: users.username })
     .from(users)
@@ -157,10 +234,7 @@ adminRoutes.post("/readers", async (context) => {
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60_000),
         invitedById: context.get("user").id,
       })
-      .returning({
-        id: readerInvitations.id,
-        expiresAt: readerInvitations.expiresAt,
-      });
+      .returning({ id: readerInvitations.id, expiresAt: readerInvitations.expiresAt });
     if (!invitation) {
       throw new AppError(
         500,
@@ -188,10 +262,7 @@ adminRoutes.post("/readers", async (context) => {
       201,
     );
   } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message.includes("reader_invitations_token_hash_uidx")
-    ) {
+    if (error instanceof Error && error.message.includes("reader_invitations_token_hash_uidx")) {
       throw new AppError(
         409,
         "INVITATION_CONFLICT",
