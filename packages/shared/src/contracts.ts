@@ -31,7 +31,8 @@ export const readerPricingSchema = z.object({
 });
 
 export const readerProfileUpdateSchema = z.object({
-  // Invited Readers may start with an empty bio and fill it in later.
+  username: trimmedText(3, 40).regex(/^[a-zA-Z0-9_.-]+$/).optional(),
+  // Readers may start with an empty bio and fill it in later.
   bio: z.string().trim().max(4_000).optional(),
   specialties: z.array(trimmedText(1, 60)).max(20).optional(),
 });

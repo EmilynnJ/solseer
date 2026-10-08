@@ -403,6 +403,7 @@ function ReaderDashboard() {
     video: reader?.pricingVideo ?? 100,
   });
   const [profile, setProfile] = useState({
+    username: me?.user.username ?? "",
     bio: reader?.bio ?? "",
     specialties: (reader?.specialties ?? []).join(", "),
   });
@@ -449,19 +450,25 @@ function ReaderDashboard() {
   async function saveProfile(e: FormEvent) {
     e.preventDefault();
     setSaving(true);
-    await api("/readers/profile", {
-      method: "PATCH",
-      body: JSON.stringify({
-        bio: profile.bio,
-        specialties: profile.specialties
-          .split(",")
-          .map((v) => v.trim())
-          .filter(Boolean),
-      }),
-    });
-    await refreshMe();
-    setMessage("Profile saved.");
-    setSaving(false);
+    try {
+      await api("/readers/profile", {
+        method: "PATCH",
+        body: JSON.stringify({
+          username: profile.username,
+          bio: profile.bio,
+          specialties: profile.specialties
+            .split(",")
+            .map((v) => v.trim())
+            .filter(Boolean),
+        }),
+      });
+      await refreshMe();
+      setMessage("Profile saved.");
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Profile could not be saved.");
+    } finally {
+      setSaving(false);
+    }
   }
   async function saveNotifications(e: FormEvent) {
     e.preventDefault();
@@ -621,6 +628,21 @@ function ReaderDashboard() {
         </DashboardSection>
         <DashboardSection icon={<BookHeart />} title="Public profile">
           <form className="stack-form compact" onSubmit={saveProfile}>
+            <label>
+              Community username
+              <input
+                required
+                minLength={3}
+                maxLength={40}
+                pattern="[A-Za-z0-9_.-]+"
+                title="Use 3–40 letters, numbers, dots, dashes or underscores."
+                autoComplete="username"
+                value={profile.username}
+                onChange={(e) =>
+                  setProfile({ ...profile, username: e.target.value })
+                }
+              />
+            </label>
             <label>
               Bio
               <textarea
@@ -784,40 +806,72 @@ function AdminDashboard() {
   );
   const [invite, setInvite] = useState({
     email: "",
-    username: "",
     fullName: "",
-    bio: "",
-    specialties: "",
-    chat: 5,
-    voice: 7,
-    video: 10,
-    verified: true,
+    temporaryPassword: "",
   });
+  const [handoff, setHandoff] = useState<string | null>(null);
   async function inviteReader(e: FormEvent) {
     e.preventDefault();
+    let authUserId: string | null = null;
+    let appProvisioned = false;
     try {
-      const result = await api<{ inviteUrl: string }>("/admin/readers", {
+      const authResult = await authClient.admin.createUser({
+        email: invite.email.trim(),
+        password: invite.temporaryPassword,
+        name: invite.fullName.trim(),
+        role: "user",
+      });
+      if (authResult.error) throw new Error(authResult.error.message);
+      authUserId = authResult.data.user.id;
+
+      await api<{ userId: string }>("/admin/readers/provision", {
         method: "POST",
         body: JSON.stringify({
-          ...invite,
-          specialties: invite.specialties
-            .split(",")
-            .map((v) => v.trim())
-            .filter(Boolean),
-          pricing: {
-            chat: Math.round(invite.chat * 100),
-            voice: Math.round(invite.voice * 100),
-            video: Math.round(invite.video * 100),
-          },
+          neonAuthUserId: authUserId,
+          email: invite.email.trim(),
+          fullName: invite.fullName.trim(),
         }),
       });
-      await navigator.clipboard
-        .writeText(result.inviteUrl)
-        .catch(() => undefined);
-      setNotice(`Reader invite created and copied: ${result.inviteUrl}`);
-      await users.refresh();
+      appProvisioned = true;
+      const handoffText = [
+        "SoulSeer reader account",
+        `Sign in: ${window.location.origin}/login`,
+        `Email: ${invite.email.trim()}`,
+        `Temporary password: ${invite.temporaryPassword}`,
+        "After signing in, choose your public username and complete your reader profile. Please change this temporary password after your first sign-in.",
+      ].join("\n");
+      try {
+        await navigator.clipboard.writeText(handoffText);
+        setNotice(`Reader account created. Handoff details copied. The reader can choose their username and complete their profile after signing in.`);
+      } catch {
+        setHandoff(handoffText);
+        setNotice("Reader account created. Copy the handoff details shown below and give them to the reader securely.");
+      }
+      setInvite({ email: "", fullName: "", temporaryPassword: "" });
+      await Promise.all([users.refresh(), readerProfiles.refresh()]).catch(() => {
+        setNotice("Reader account created. Refresh the dashboard if the Readers list does not update.");
+      });
     } catch (cause) {
-      setNotice(`Invite failed: ${inviteErrorMessage(cause)}`);
+      let rollbackFailed = false;
+      // Compensate only for a confirmed HTTP rejection. A network failure can
+      // happen after the Worker committed, so deleting Auth then could orphan
+      // the app account.
+      if (authUserId && !appProvisioned && cause instanceof ApiError) {
+        try {
+          const rollback = await authClient.admin.removeUser({ userId: authUserId });
+          rollbackFailed = Boolean(rollback.error);
+        } catch {
+          rollbackFailed = true;
+        }
+      }
+      const uncertain = authUserId && !appProvisioned && !(cause instanceof ApiError);
+      setNotice(
+        appProvisioned
+          ? `Reader account created, but a later step failed. ${inviteErrorMessage(cause)}`
+          : uncertain
+          ? `Could not confirm reader account setup. Check the Readers list before retrying; the account may already exist. ${inviteErrorMessage(cause)}`
+          : `Reader setup failed${rollbackFailed ? "; the login could not be rolled back, so check Neon Auth before retrying" : ""}: ${inviteErrorMessage(cause)}`,
+      );
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }
@@ -976,68 +1030,74 @@ function AdminDashboard() {
         </DashboardSection>
       )}
       {tab === "readers" && (
-        <DashboardSection icon={<Check />} title="Invite a Reader">
+        <DashboardSection icon={<Check />} title="Set up a Reader account">
           <form className="admin-form" onSubmit={inviteReader}>
-            {["email", "username", "fullName", "specialties"].map((k) => (
-              <label key={k}>
-                {k.replace(/([A-Z])/g, " $1")}
-                <input
-                  required={k !== "specialties"}
-                  placeholder={
-                    k === "specialties" ? "Optional – Reader can add later" : undefined
-                  }
-                  type={k === "email" ? "email" : "text"}
-                  {...(k === "username"
-                    ? {
-                        minLength: 3,
-                        maxLength: 40,
-                        pattern: "[A-Za-z0-9_.\\-]+",
-                        title:
-                          "3–40 letters, numbers, dots, dashes or underscores. No spaces or @.",
-                      }
-                    : {})}
-                  value={invite[k as keyof typeof invite] as string}
-                  onChange={(e) =>
-                    setInvite({ ...invite, [k]: e.target.value })
-                  }
-                />
-              </label>
-            ))}
-            <label className="wide">
-              Bio
-              <textarea
-                rows={4}
-                placeholder="Optional – Reader can add later"
-                value={invite.bio}
-                onChange={(e) => setInvite({ ...invite, bio: e.target.value })}
+            <label>
+              Full name
+              <input
+                required
+                minLength={2}
+                maxLength={100}
+                autoComplete="name"
+                value={invite.fullName}
+                onChange={(e) => setInvite({ ...invite, fullName: e.target.value })}
               />
             </label>
-            {(["chat", "voice", "video"] as const).map((k) => (
-              <label key={k}>
-                {k} $/min
-                <input
-                  required
-                  type="number"
-                  min="1"
-                  value={invite[k]}
-                  onChange={(e) =>
-                    setInvite({ ...invite, [k]: Number(e.target.value) })
-                  }
-                />
-              </label>
-            ))}
-            <label className="check">
+            <label>
+              Email address
               <input
-                type="checkbox"
-                checked={invite.verified}
-                onChange={(e) =>
-                  setInvite({ ...invite, verified: e.target.checked })
-                }
-              />{" "}
-              Pre-verify Reader
+                required
+                type="email"
+                maxLength={254}
+                autoComplete="email"
+                value={invite.email}
+                onChange={(e) => setInvite({ ...invite, email: e.target.value })}
+              />
             </label>
-            <Button>Generate secure invite</Button>
+            <label>
+              Temporary password
+              <input
+                required
+                type="password"
+                minLength={8}
+                maxLength={128}
+                autoComplete="new-password"
+                value={invite.temporaryPassword}
+                onChange={(e) =>
+                  setInvite({ ...invite, temporaryPassword: e.target.value })
+                }
+              />
+            </label>
+            <p className="wide">
+              The Reader will choose a username, verify their email, and complete their profile after signing in.
+            </p>
+            <Button>Create Reader account</Button>
           </form>
+          {handoff && (
+            <div className="stack-form compact" role="status">
+              <label>
+                Handoff details
+                <textarea readOnly rows={5} value={handoff} />
+              </label>
+              <Button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(handoff);
+                    setHandoff(null);
+                    setNotice("Handoff details copied. Give them to the reader securely.");
+                  } catch {
+                    setNotice("Clipboard access is unavailable. Select and copy the handoff text above, then hide it when finished.");
+                  }
+                }}
+              >
+                Copy and hide handoff details
+              </Button>
+              <Button type="button" onClick={() => setHandoff(null)}>
+                Hide handoff details
+              </Button>
+            </div>
+          )}
         </DashboardSection>
       )}
       {tab === "readers" && (
@@ -1366,11 +1426,8 @@ function LedgerTable({ rows }: { rows: LedgerEntry[] }) {
 
 const INVITE_FIELD_LABELS: Record<string, string> = {
   email: "Email",
-  username: "Username (letters, numbers, . _ - only, no spaces or @)",
   fullName: "Full name",
-  bio: "Bio",
-  specialties: "Specialties",
-  pricing: "Prices (at least $1/min)",
+  temporaryPassword: "Temporary password (at least 8 characters)",
 };
 
 function inviteErrorMessage(cause: unknown) {

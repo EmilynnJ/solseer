@@ -204,10 +204,31 @@ readerRoutes.patch(
   requireRole("reader"),
   async (context) => {
     const input = readerProfileUpdateSchema.parse(await context.req.json());
+    const { username, ...profileInput } = input;
     const { db } = createDatabase(context.env.DATABASE_URL);
+    if (username) {
+      try {
+        await db
+          .update(users)
+          .set({ username, updatedAt: new Date() })
+          .where(eq(users.id, context.get("user").id));
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message.includes("users_username_lower_uidx")
+        ) {
+          throw new AppError(
+            409,
+            "USERNAME_TAKEN",
+            "That username is already in use. Choose another one.",
+          );
+        }
+        throw error;
+      }
+    }
     const [reader] = await db
       .update(readerProfiles)
-      .set({ ...input, updatedAt: new Date() })
+      .set({ ...profileInput, updatedAt: new Date() })
       .where(eq(readerProfiles.userId, context.get("user").id))
       .returning();
     return context.json({ reader });
