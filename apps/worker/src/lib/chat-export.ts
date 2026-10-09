@@ -66,5 +66,5 @@ export function isAllowedChatExportHost(hostname: string): boolean {
   const cloudflare = ["cloudflare.com", "realtimekit.com", "cloudflarestream.com"];
   if (cloudflare.some((domain) => host === domain || host.endsWith(`.${domain}`)))
     return true;
-  return /^(?:[a-z0-9.-]+\.)?s3(?:[.-][a-z0-9-]+)*\.amazonaws\.com$/.test(host);
+  return /^(?:[a-z0-9.-]+\.)?s3(?:[.-][a-z0-9]+)*\.amazonaws\.com$/.test(host);
 }
