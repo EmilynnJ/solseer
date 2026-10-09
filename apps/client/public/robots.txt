@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /account
+
+Sitemap: https://soul-seer.net/sitemap.xml
