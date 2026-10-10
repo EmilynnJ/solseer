@@ -1,5 +1,7 @@
 // Build public, route-specific HTML without fetching the API or touching user data.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import createDOMPurify from "dompurify";
+import { JSDOM } from "jsdom";
 
 const dist = new URL("../dist/", import.meta.url);
 const rootPath = new URL("index.html", dist);
@@ -87,6 +89,20 @@ const escapeHtml = (value) =>
   value.replaceAll("&", "&amp;").replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
+// Policy content is already local in the frontend repo. Sanitize the same HTML
+// that the React PolicyPage displays, rather than reducing legal pages to teasers.
+const policySlugs = new Set([
+  "privacy", "terms", "acceptable-use", "accessibility", "eula", "disclaimer",
+]);
+const purifier = createDOMPurify(new JSDOM("").window);
+function publicPolicyMarkup(slug) {
+  if (!policySlugs.has(slug)) return "";
+  const raw = readFileSync(
+    new URL(`../src/content/policies/${slug}.html`, import.meta.url), "utf8"
+  );
+  return `<article class="policy-document">${purifier.sanitize(raw)}</article>`;
+}
+
 function replaceOnce(document, regex, replacement, label) {
   if (!regex.test(document)) throw new Error(`Expected HTML marker not found: ${label}`);
   return document.replace(regex, replacement);
@@ -117,6 +133,7 @@ function render(page) {
     <h1>${escapeHtml(page.heading)}</h1>
     <p>${escapeHtml(page.description)}</p>
     <p>${escapeHtml(page.detail)}</p>
+    ${publicPolicyMarkup(page.slug)}
     <nav aria-label="SoulSeer public pages"><a href="/">SoulSeer home</a>
       <a href="/readers/">Browse psychic readers</a>
       <a href="/about/">About SoulSeer</a></nav>
@@ -133,6 +150,9 @@ for (const page of pages) {
   const canonical = `<link rel="canonical" href="${origin}/${page.slug}/" />`;
   const social = `<meta property="og:url" content="${origin}/${page.slug}/" />`;
   const heading = `<h1>${escapeHtml(page.heading)}</h1>`;
+  if (policySlugs.has(page.slug) && !rendered.includes('class="policy-document"')) {
+    throw new Error(`Full policy content missing for /${page.slug}/`);
+  }
   if (![canonical, social, heading].every((marker) => rendered.includes(marker))) {
     throw new Error(`Crawler HTML validation failed for /${page.slug}/`);
   }
