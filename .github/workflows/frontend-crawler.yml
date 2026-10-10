@@ -48,6 +48,12 @@ jobs:
               'incorrect social URL on ' + slug);
             assert(page.includes('<h1>'), 'missing crawler heading on ' + slug);
           }
+          for (const slug of ['privacy', 'terms', 'acceptable-use',
+            'accessibility', 'eula', 'disclaimer']) {
+            const policy = readFileSync(root + slug + '/index.html', 'utf8');
+            assert(policy.includes('class="policy-document"'),
+              'full policy text missing on ' + slug);
+          }
           const fallback = readFileSync(root + '_app.html', 'utf8');
           assert(!fallback.includes('rel="canonical"'), 'SPA fallback canonical leaked');
           assert(!fallback.includes('property="og:url"'), 'SPA fallback social URL leaked');
