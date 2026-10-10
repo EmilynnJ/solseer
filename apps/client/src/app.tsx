@@ -57,7 +57,7 @@ const PolicyPage = lazy(() =>
 function PublicMetadata() {
   const { pathname } = useLocation();
   useEffect(() => {
-    const path = pathname.replace(/\\/+$/, "") || "/";
+    const path = pathname.replace(/\/+$/, "") || "/";
     const current = publicPages.find(({ slug }) => (slug ? "/" + slug : "/") === path);
     const page = current ?? publicPages[0]!;
     const base = "https://www.soul-seer.net";
