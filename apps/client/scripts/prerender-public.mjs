@@ -12,78 +12,9 @@ if (!existsSync(new URL("images/soulseer-hero-logo.jpg", dist))) {
   throw new Error("Public social-preview image missing from the Vite build.");
 }
 
-const pages = [
-  {
-    slug: "readers",
-    title: "Find a Psychic Reader | SoulSeer",
-    heading: "Find the Reader who feels right.",
-    description: "Meet SoulSeer's personally approved psychic readers. Explore chat, voice, and video readings with compassionate, judgment-free guidance.",
-    detail: "Explore the SoulSeer reader community and choose the reading format that works for you.",
-  },
-  {
-    slug: "about",
-    title: "About SoulSeer | Ethical Psychic Readings",
-    heading: "Built for guidance with a conscience.",
-    description: "Learn why psychic medium Emilynn founded SoulSeer and how our community supports ethical, compassionate readings and fair treatment of readers.",
-    detail: "SoulSeer was created to offer heart-centered guidance, fair standards for readers, and a welcoming spiritual community.",
-  },
-  {
-    slug: "community",
-    title: "SoulSeer Community | Share, Listen, Grow",
-    heading: "A place to share, listen, and grow.",
-    description: "Explore SoulSeer's spiritual community for respectful conversations, support, learning, and connection with readers and seekers.",
-    detail: "Join conversations rooted in curiosity, kindness, and mutual respect.",
-  },
-  {
-    slug: "help",
-    title: "Help & Frequently Asked Questions | SoulSeer",
-    heading: "Help & frequently asked questions",
-    description: "Find SoulSeer answers about live readings, prepaid billing, connection interruptions, refunds, privacy, and accessibility support.",
-    detail: "Find clear answers before, during, and after your SoulSeer reading.",
-  },
-  {
-    slug: "privacy",
-    title: "Privacy Policy | SoulSeer",
-    heading: "Privacy Policy",
-    description: "Read SoulSeer's privacy notice to understand how personal information is collected, used, shared, and protected.",
-    detail: "This notice explains how SoulSeer handles personal information when you use our services.",
-  },
-  {
-    slug: "terms",
-    title: "Terms of Use | SoulSeer",
-    heading: "Terms of Use",
-    description: "Read the terms and conditions that govern access to and use of SoulSeer's website, app, and related services.",
-    detail: "Understand the legal terms governing SoulSeer's services.",
-  },
-  {
-    slug: "acceptable-use",
-    title: "Acceptable Use Policy | SoulSeer",
-    heading: "Acceptable Use Policy",
-    description: "Review SoulSeer's acceptable use policy and the rules for responsible participation in our services and community.",
-    detail: "Learn about the standards for using SoulSeer safely and respectfully.",
-  },
-  {
-    slug: "accessibility",
-    title: "Accessibility Statement | SoulSeer",
-    heading: "Accessibility Statement",
-    description: "Read SoulSeer's accessibility statement, our WCAG 2.2 AA improvement goal, known limitations, and how to request assistance.",
-    detail: "Accessibility is an ongoing effort at SoulSeer. Learn about our goals and available help.",
-  },
-  {
-    slug: "eula",
-    title: "End User License Agreement | SoulSeer",
-    heading: "End User License Agreement",
-    description: "Review the End User License Agreement for SoulSeer's website, application, and related services.",
-    detail: "Read the license terms for using the SoulSeer app and services.",
-  },
-  {
-    slug: "disclaimer",
-    title: "Disclaimer | SoulSeer",
-    heading: "Disclaimer",
-    description: "Read SoulSeer's disclaimer about spiritual readings and the limitations of guidance offered through the platform.",
-    detail: "SoulSeer readings are for entertainment and reflection, not a substitute for professional advice.",
-  },
-];
+const pages = JSON.parse(readFileSync(
+  new URL("../src/content/public-pages.json", import.meta.url), "utf8"
+));
 
 const escapeHtml = (value) =>
   value.replaceAll("&", "&amp;").replaceAll("<", "&lt;")
@@ -143,7 +74,7 @@ function render(page) {
   return output;
 }
 
-for (const page of pages) {
+for (const page of pages.filter((page) => page.slug)) {
   const directory = new URL(`${page.slug}/`, dist);
   mkdirSync(directory, { recursive: true });
   const rendered = render(page);
