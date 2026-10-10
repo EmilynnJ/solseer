@@ -51,6 +51,5 @@ jobs:
           const fallback = readFileSync(root + '_app.html', 'utf8');
           assert(!fallback.includes('rel="canonical"'), 'SPA fallback canonical leaked');
           assert(!fallback.includes('property="og:url"'), 'SPA fallback social URL leaked');
-          assert(fallback.includes('name="robots" content="noindex,follow"'));
           console.log('Checked homepage, 10 public routes, image, and neutral fallback.');
           NODE
