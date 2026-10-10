@@ -1,6 +1,5 @@
 // Build public, route-specific HTML without fetching the API or touching user data.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 
 const dist = new URL("../dist/", import.meta.url);
 const rootPath = new URL("index.html", dist);
@@ -130,7 +129,14 @@ function render(page) {
 for (const page of pages) {
   const directory = new URL(`${page.slug}/`, dist);
   mkdirSync(directory, { recursive: true });
-  writeFileSync(new URL("index.html", directory), render(page));
+  const rendered = render(page);
+  const canonical = `<link rel="canonical" href="${origin}/${page.slug}/" />`;
+  const social = `<meta property="og:url" content="${origin}/${page.slug}/" />`;
+  const heading = `<h1>${escapeHtml(page.heading)}</h1>`;
+  if (![canonical, social, heading].every((marker) => rendered.includes(marker))) {
+    throw new Error(`Crawler HTML validation failed for /${page.slug}/`);
+  }
+  writeFileSync(new URL("index.html", directory), rendered);
 }
 
 // The catch-all SPA route should use this generic shell instead of homepage HTML.
@@ -142,6 +148,10 @@ fallback = replaceOnce(fallback, /<\/head>/i,
   '  <meta name="robots" content="noindex,follow" />\n  </head>', "head");
 fallback = replaceOnce(fallback, /<div id="root">[\s\S]*?<\/div>/i,
   '<div id="root"></div>', "root");
+if (fallback.includes('rel="canonical"') || fallback.includes('property="og:url"') ||
+    !fallback.includes('name="robots" content="noindex,follow"')) {
+  throw new Error("Neutral SPA fallback still contains homepage indexing metadata.");
+}
 writeFileSync(new URL("_app.html", dist), fallback);
 
 console.log(`Generated ${pages.length} route-specific public pages and a neutral SPA fallback.`);
