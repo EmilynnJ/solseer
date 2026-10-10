@@ -139,17 +139,14 @@ for (const page of pages) {
   writeFileSync(new URL("index.html", directory), rendered);
 }
 
-// The catch-all SPA route should use this generic shell instead of homepage HTML.
+// The catch-all SPA route should use a neutral shell, without claiming the homepage canonical.
 // In Render, change the existing /* rewrite destination to /_app.html *after* deploy.
 let fallback = html;
 fallback = fallback.replace(/<link\b(?=[^>]*\brel="canonical")[^>]*>\s*/i, "");
 fallback = fallback.replace(/<meta\b(?=[^>]*\bproperty="og:url")[^>]*>\s*/i, "");
-fallback = replaceOnce(fallback, /<\/head>/i,
-  '  <meta name="robots" content="noindex,follow" />\n  </head>', "head");
 fallback = replaceOnce(fallback, /<div id="root">[\s\S]*?<\/div>/i,
   '<div id="root"></div>', "root");
-if (fallback.includes('rel="canonical"') || fallback.includes('property="og:url"') ||
-    !fallback.includes('name="robots" content="noindex,follow"')) {
+if (fallback.includes('rel="canonical"') || fallback.includes('property="og:url"')) {
   throw new Error("Neutral SPA fallback still contains homepage indexing metadata.");
 }
 writeFileSync(new URL("_app.html", dist), fallback);
