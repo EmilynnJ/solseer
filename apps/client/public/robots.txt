@@ -4,4 +4,4 @@ Disallow: /dashboard
 Disallow: /admin
 Disallow: /account
 
-Sitemap: https://soul-seer.net/sitemap.xml
+Sitemap: https://www.soul-seer.net/sitemap.xml
