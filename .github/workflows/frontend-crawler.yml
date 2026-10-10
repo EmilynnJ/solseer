@@ -1,0 +1,61 @@
+name: Verify public crawler pages
+
+on:
+  pull_request:
+    paths:
+      - "apps/client/**"
+      - "packages/shared/**"
+      - "package-lock.json"
+      - ".github/workflows/frontend-crawler.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-crawler:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build shared package
+        run: npm run build -w @soulseer/shared
+      - name: Build frontend and prerender public pages
+        run: npm run build -w @soulseer/client
+      - name: Check public metadata without API or database access
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, existsSync } from 'node:fs';
+          import assert from 'node:assert/strict';
+
+          const root = 'apps/client/dist/';
+          const origin = 'https://www.soul-seer.net';
+          const slugs = ['readers', 'about', 'community', 'help', 'privacy',
+            'terms', 'acceptable-use', 'accessibility', 'eula', 'disclaimer'];
+          assert(existsSync(root + 'images/soulseer-hero-logo.jpg'), 'preview image missing');
+          const homepage = readFileSync(root + 'index.html', 'utf8');
+          assert(homepage.includes('rel="canonical" href="' + origin + '/"'));
+          for (const slug of slugs) {
+            const page = readFileSync(root + slug + '/index.html', 'utf8');
+            assert(page.includes('rel="canonical" href="' + origin + '/' + slug + '/"'),
+              'incorrect canonical on ' + slug);
+            assert(page.includes('property="og:url" content="' + origin + '/' + slug + '/"'),
+              'incorrect social URL on ' + slug);
+            assert(page.includes('<h1>'), 'missing crawler heading on ' + slug);
+          }
+          for (const slug of ['privacy', 'terms', 'acceptable-use',
+            'accessibility', 'eula', 'disclaimer']) {
+            const policy = readFileSync(root + slug + '/index.html', 'utf8');
+            assert(policy.includes('class="policy-document"'),
+              'full policy text missing on ' + slug);
+          }
+          const fallback = readFileSync(root + '_app.html', 'utf8');
+          assert(!fallback.includes('rel="canonical"'), 'SPA fallback canonical leaked');
+          assert(!fallback.includes('property="og:url"'), 'SPA fallback social URL leaked');
+          console.log('Checked homepage, 10 public routes, image, and neutral fallback.');
+          NODE

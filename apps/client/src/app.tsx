@@ -1,10 +1,11 @@
-import { lazy, Suspense } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { lazy, Suspense, useEffect } from "react";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { NeonAuthUIProvider } from "@neondatabase/neon-js/auth/react/ui";
 import { authClient } from "./lib/auth";
 import { SoulAuthProvider, Protected } from "./components/auth-context";
 import { Layout } from "./components/layout";
 import { Loading } from "./components/ui";
+import publicPages from "./content/public-pages.json";
 
 const HomePage = lazy(() =>
   import("./pages/home").then((module) => ({ default: module.HomePage })),
@@ -53,6 +54,51 @@ const PolicyPage = lazy(() =>
   import("./pages/policy").then((module) => ({ default: module.PolicyPage })),
 );
 
+function PublicMetadata() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const path = pathname.replace(/\/+$/, "") || "/";
+    const current = publicPages.find(({ slug }) => (slug ? "/" + slug : "/") === path);
+    const page = current ?? publicPages[0]!;
+    const base = "https://www.soul-seer.net";
+    const canonicalUrl = current ? base + "/" + (current.slug ? current.slug + "/" : "") : null;
+    document.title = page.title;
+
+    const canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    if (canonicalUrl) {
+      if (canonical) canonical.href = canonicalUrl;
+      else {
+        const link = document.createElement("link");
+        link.rel = "canonical";
+        link.href = canonicalUrl;
+        document.head.appendChild(link);
+      }
+    } else canonical?.remove();
+
+    for (const [attribute, key, content] of [
+      ["name", "description", page.description],
+      ["property", "og:url", canonicalUrl],
+      ["property", "og:title", page.title],
+      ["property", "og:description", page.description],
+      ["name", "twitter:title", page.title],
+      ["name", "twitter:description", page.description],
+    ] as const) {
+      let tag = document.querySelector<HTMLMetaElement>(`meta[${attribute}="${key}"]`);
+      if (content === null) {
+        tag?.remove();
+      } else {
+        if (!tag) {
+          tag = document.createElement("meta");
+          tag.setAttribute(attribute, key);
+          document.head.appendChild(tag);
+        }
+        tag.content = content;
+      }
+    }
+  }, [pathname]);
+  return null;
+}
+
 export function App() {
   return (
     <NeonAuthUIProvider
@@ -61,6 +107,7 @@ export function App() {
       redirectTo="/dashboard"
     >
       <BrowserRouter>
+        <PublicMetadata />
         <SoulAuthProvider>
           <Suspense
             fallback={
