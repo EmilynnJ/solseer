@@ -37,6 +37,7 @@ export type Reading = {
   pricePerMinute: number;
   durationSeconds: number;
   totalPrice: number;
+  createdAt?: string;
   startedAt: string | null;
   completedAt: string | null;
   counterpartName?: string;
@@ -44,6 +45,38 @@ export type Reading = {
   readerId?: string;
   rating?: number | null;
   review?: string | null;
+};
+
+export type MessageConversation = {
+  id: string;
+  counterpart: {
+    id: string;
+    username: string;
+    fullName: string;
+    profileImageKey: string | null;
+  };
+  lastMessage: {
+    id: string;
+    kind: "client_message" | "reader_free" | "reader_paid";
+    body: string | null;
+    priceCents: number;
+    locked: boolean;
+    createdAt: string;
+  } | null;
+  unreadCount: number;
+  lastMessageAt: string;
+};
+
+export type DirectMessage = {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  kind: "client_message" | "reader_free" | "reader_paid";
+  body: string | null;
+  priceCents: number;
+  locked: boolean;
+  unlocked: boolean;
+  createdAt: string;
 };
 
 export type LedgerEntry = {

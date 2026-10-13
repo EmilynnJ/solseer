@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
   Globe2,
-  Heart,
   LogOut,
   Menu,
   MessageCircle,
@@ -10,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { authClient } from "../lib/auth";
+import { posthog } from "../lib/posthog";
 import { useSoulAuth } from "./auth-context";
 
 const nav = [
@@ -25,6 +25,7 @@ export function Layout() {
   const navigate = useNavigate();
   async function signOut() {
     await authClient.signOut();
+    posthog.reset();
     await navigate("/");
   }
   return (
@@ -79,6 +80,11 @@ export function Layout() {
           ))}
           {sessionUser ? (
             <>
+              {me?.user.role !== "admin" && (
+                <NavLink to="/messages" aria-label="Messages">
+                  <MessageCircle size={17} /> Messages
+                </NavLink>
+              )}
               <NavLink to="/dashboard" aria-label="Dashboard">
                 <UserRound size={17} /> {me?.user.username ?? "Dashboard"}
               </NavLink>
@@ -110,10 +116,16 @@ export function Layout() {
         </div>
         <div className="footer-links">
           <Link to="/privacy">Privacy</Link>
+          <Link to="/terms">Terms of Use</Link>
+          <Link to="/acceptable-use">Acceptable Use</Link>
+          <Link to="/eula">EULA</Link>
+          <Link to="/disclaimer">Disclaimer</Link>
           <Link to="/help">Help</Link>
+          <Link to="/accessibility">Accessibility</Link>
           <a
             href={
-              import.meta.env.VITE_FACEBOOK_GROUP_URL || "https://www.facebook.com"
+              import.meta.env.VITE_FACEBOOK_GROUP_URL ||
+              "https://www.facebook.com"
             }
             target="_blank"
             rel="noreferrer"
@@ -121,18 +133,26 @@ export function Layout() {
             <Globe2 size={16} /> Facebook
           </a>
           <a
-            href={import.meta.env.VITE_DISCORD_INVITE_URL || "https://discord.com"}
+            href={
+              import.meta.env.VITE_DISCORD_INVITE_URL || "https://discord.com"
+            }
             target="_blank"
             rel="noreferrer"
           >
             <MessageCircle size={16} /> Discord
           </a>
         </div>
-        <p className="copyright">
-          <Heart size={13} /> Spiritual guidance is for personal insight and
-          entertainment; it is not medical, legal, or financial advice. ©{" "}
-          {new Date().getFullYear()} SoulSeer.
-        </p>
+        <div className="copyright footer-accessibility">
+          <p>For entertainment purposes only.</p>
+          <p>
+            SoulSeer is committed to providing an accessible website for people
+            with disabilities. If you experience difficulty accessing any part
+            of our site, please contact{" "}
+            <a href="mailto:support@soul-seer.net?subject=Accessibility%20assistance">support@soul-seer.net</a>{" "}
+            for assistance. <Link to="/accessibility">Accessibility Statement</Link>
+          </p>
+          <p>© {new Date().getFullYear()} SoulSeer.</p>
+        </div>
       </footer>
     </div>
   );

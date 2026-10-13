@@ -13,18 +13,31 @@ import {
   Check,
   CircleDollarSign,
   History,
-  ImageUp,
   Radio,
   Shield,
   Star,
   Users,
 } from "lucide-react";
-import { TOP_UP_PRESETS_CENTS } from "@soulseer/shared";
+import { readerNotificationSettingsSchema, TOP_UP_PRESETS_CENTS } from "@soulseer/shared";
 import type { LedgerEntry, Reading } from "../types";
-import { API_ORIGIN, api, dateTime, duration, money } from "../lib/api";
+import { ApiError, api, dateTime, duration, money } from "../lib/api";
 import { useApiData } from "../hooks/use-api";
 import { useSoulAuth } from "../components/auth-context";
-import { authClient, getAccessToken } from "../lib/auth";
+import { ReaderImageUpload } from "../components/reader-image-upload";
+import {
+  AdminAnalytics,
+  AdminLedger,
+  AdminModeration,
+  AdminRevenue,
+  AdminTranscripts,
+} from "../components/admin-insights";
+import {
+  AdminReaderProfiles,
+  ReadingRecordModal,
+  type AdminReaderProfile,
+} from "../components/admin-records";
+import { authClient } from "../lib/auth";
+import { posthog } from "../lib/posthog";
 import {
   Button,
   Empty,
@@ -90,6 +103,10 @@ function ClientDashboard() {
         item.status,
       ),
     ) ?? [];
+  const completed =
+    history.data?.readings.filter((item) =>
+      ["ended", "failed", "cancelled"].includes(item.status),
+    ) ?? [];
   async function exportData() {
     const data = await api<Record<string, unknown>>("/auth/export");
     const url = URL.createObjectURL(
@@ -111,6 +128,7 @@ function ClientDashboard() {
       body: JSON.stringify({ confirmation }),
     });
     await authClient.deleteUser().catch(() => authClient.signOut());
+    posthog.reset();
     window.location.assign("/");
   }
   return (
@@ -166,11 +184,7 @@ function ClientDashboard() {
         {history.error ? (
           <Notice tone="error">{history.error}</Notice>
         ) : (
-          <ReadingTable
-            rows={
-              history.data?.readings.filter((r) => r.status === "ended") ?? []
-            }
-          />
+          <ReadingTable rows={completed} />
         )}
       </DashboardSection>
       <DashboardSection icon={<Banknote />} title="Transactions">
@@ -242,6 +256,7 @@ function TopUpModal({
           body: JSON.stringify({ amountCents: chosen }),
         },
       );
+      posthog.capture("payment_intent_created", { amount_cents: chosen });
       setSecret(result.clientSecret);
     } catch (cause) {
       setError(
@@ -334,6 +349,7 @@ function PaymentForm({ onComplete }: { onComplete: () => Promise<void> }) {
       return;
     }
     await onComplete();
+    posthog.capture("balance_top_up_completed");
   }
   return (
     <form className="stripe-form" onSubmit={pay}>
@@ -360,6 +376,8 @@ function ReaderDashboard() {
     pricingVideo?: number;
     bio?: string;
     specialties?: string[];
+    phoneNumber?: string | null;
+    smsNotificationsEnabled?: boolean;
   } | null;
   const insights = useApiData(
     () =>
@@ -385,9 +403,16 @@ function ReaderDashboard() {
     video: reader?.pricingVideo ?? 100,
   });
   const [profile, setProfile] = useState({
+    username: me?.user.username ?? "",
     bio: reader?.bio ?? "",
     specialties: (reader?.specialties ?? []).join(", "),
   });
+  const [notifications, setNotifications] = useState({
+    phoneNumber: reader?.phoneNumber ?? "",
+    smsNotificationsEnabled: reader?.smsNotificationsEnabled ?? false,
+  });
+  const [notificationError, setNotificationError] = useState<string | null>(null);
+  const [notificationSaved, setNotificationSaved] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   useEffect(() => {
     if (!reader?.isOnline) return;
@@ -406,6 +431,9 @@ function ReaderDashboard() {
       body: JSON.stringify({ isOnline: !reader?.isOnline }),
     });
     await refreshMe();
+    posthog.capture("reader_availability_changed", {
+      is_online: !reader?.isOnline,
+    });
     setSaving(false);
   }
   async function saveRates(e: FormEvent) {
@@ -422,19 +450,57 @@ function ReaderDashboard() {
   async function saveProfile(e: FormEvent) {
     e.preventDefault();
     setSaving(true);
-    await api("/readers/profile", {
-      method: "PATCH",
-      body: JSON.stringify({
-        bio: profile.bio,
-        specialties: profile.specialties
-          .split(",")
-          .map((v) => v.trim())
-          .filter(Boolean),
-      }),
+    try {
+      await api("/readers/profile", {
+        method: "PATCH",
+        body: JSON.stringify({
+          username: profile.username,
+          bio: profile.bio,
+          specialties: profile.specialties
+            .split(",")
+            .map((v) => v.trim())
+            .filter(Boolean),
+        }),
+      });
+      await refreshMe();
+      setMessage("Profile saved.");
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Profile could not be saved.");
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function saveNotifications(e: FormEvent) {
+    e.preventDefault();
+    setNotificationError(null);
+    setNotificationSaved(false);
+    // Preserve an explicit country code; do not guess a destination country.
+    const input = readerNotificationSettingsSchema.safeParse({
+      phoneNumber: notifications.phoneNumber.trim().replace(/[\s().-]/g, "") || null,
+      smsNotificationsEnabled: notifications.smsNotificationsEnabled,
     });
-    await refreshMe();
-    setMessage("Profile saved.");
-    setSaving(false);
+    if (!input.success) {
+      setNotificationError(input.error.issues[0]?.message ?? "Check your mobile number.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await api("/readers/notifications", {
+        method: "PATCH",
+        body: JSON.stringify(input.data),
+      });
+      setNotifications({ ...input.data, phoneNumber: input.data.phoneNumber ?? "" });
+      await refreshMe();
+      setNotificationSaved(true);
+    } catch (cause) {
+      setNotificationError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to save text notification settings.",
+      );
+    } finally {
+      setSaving(false);
+    }
   }
   async function accept(id: string) {
     try {
@@ -449,6 +515,10 @@ function ReaderDashboard() {
   const earnings = insights.data?.summary.historicalEarnings ?? 0;
   const pending =
     history.data?.readings.filter((r) => r.status === "pending") ?? [];
+  const completed =
+    history.data?.readings.filter((item) =>
+      ["ended", "failed", "cancelled"].includes(item.status),
+    ) ?? [];
   return (
     <div className="page-shell dashboard">
       <DashboardHeader
@@ -559,6 +629,21 @@ function ReaderDashboard() {
         <DashboardSection icon={<BookHeart />} title="Public profile">
           <form className="stack-form compact" onSubmit={saveProfile}>
             <label>
+              Community username
+              <input
+                required
+                minLength={3}
+                maxLength={40}
+                pattern="[A-Za-z0-9_.-]+"
+                title="Use 3–40 letters, numbers, dots, dashes or underscores."
+                autoComplete="username"
+                value={profile.username}
+                onChange={(e) =>
+                  setProfile({ ...profile, username: e.target.value })
+                }
+              />
+            </label>
+            <label>
               Bio
               <textarea
                 rows={5}
@@ -584,12 +669,51 @@ function ReaderDashboard() {
         </DashboardSection>
       </div>
       <DashboardSection icon={<History />} title="Session & review history">
-        <ReadingTable
-          rows={
-            history.data?.readings.filter((r) => r.status === "ended") ?? []
-          }
-          reader
-        />
+        <ReadingTable rows={completed} reader />
+      </DashboardSection>
+      <DashboardSection icon={<Radio />} title="Reading alerts">
+        <form className="stack-form compact" onSubmit={saveNotifications}>
+          <label>
+            Mobile number
+            <input
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="+15551234567"
+              aria-describedby="reading-alert-phone-help"
+              aria-invalid={Boolean(notificationError)}
+              disabled={saving}
+              value={notifications.phoneNumber}
+              onChange={(event) =>
+                setNotifications({
+                  ...notifications,
+                  phoneNumber: event.target.value,
+                })
+              }
+            />
+          </label>
+          <small id="reading-alert-phone-help">
+            Include + and your country code, for example +1 555 123 4567 for a US or Canadian number.
+          </small>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              disabled={saving}
+              checked={notifications.smsNotificationsEnabled}
+              onChange={(event) =>
+                setNotifications({
+                  ...notifications,
+                  smsNotificationsEnabled: event.target.checked,
+                })
+              }
+            />
+            Text me when a client requests a reading. Message and data rates may
+            apply. Reply STOP to opt out.
+          </label>
+          {notificationError && <Notice tone="error">{notificationError}</Notice>}
+          {notificationSaved && <Notice tone="success">Text notification settings saved.</Notice>}
+          <Button disabled={saving}>Save reading alerts</Button>
+        </form>
       </DashboardSection>
       <DashboardSection icon={<Star />} title="Reviews received">
         {insights.data?.reviews.length ? (
@@ -614,51 +738,6 @@ function ReaderDashboard() {
   );
 }
 
-function ReaderImageUpload({ onDone }: { onDone: () => void }) {
-  const [busy, setBusy] = useState(false);
-  async function choose(file?: File) {
-    if (!file) return;
-    setBusy(true);
-    const cap = await api<{ capability: string; signature: string }>(
-      "/uploads/reader-image/capability",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          fileName: file.name,
-          contentType: file.type,
-          size: file.size,
-        }),
-      },
-    );
-    const token = await getAccessToken();
-    const response = await fetch(`${API_ORIGIN}/api/uploads/reader-image`, {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": file.type,
-        "Content-Length": String(file.size),
-        "X-SoulSeer-Upload-Capability": cap.capability,
-        "X-SoulSeer-Upload-Signature": cap.signature,
-      },
-      body: file,
-    });
-    if (!response.ok) throw new Error("Image upload failed.");
-    setBusy(false);
-    onDone();
-  }
-  return (
-    <label className="upload-button">
-      <ImageUp /> {busy ? "Uploading…" : "Upload profile image"}
-      <input
-        type="file"
-        hidden
-        accept="image/jpeg,image/png,image/webp"
-        onChange={(e) => void choose(e.target.files?.[0])}
-      />
-    </label>
-  );
-}
-
 type AdminUser = {
   id: string;
   email: string;
@@ -678,6 +757,8 @@ type AdminReading = {
   type: string;
   clientId: string;
   readerId: string;
+  clientName: string | null;
+  readerName: string | null;
   durationSeconds: number;
   totalPrice: number;
   paymentStatus: string;
@@ -705,10 +786,11 @@ function AdminDashboard() {
     () => api<{ readings: AdminReading[] }>("/admin/readings"),
     [],
   );
-  const ledger = useApiData(
-    () => api<{ transactions: LedgerEntry[] }>("/admin/transactions"),
+  const readerProfiles = useApiData(
+    () => api<{ readers: AdminReaderProfile[] }>("/admin/readers"),
     [],
   );
+  const [openReading, setOpenReading] = useState<string | null>(null);
   const flags = useApiData(
     () => api<{ flags: AdminFlag[] }>("/admin/forum/flagged"),
     [],
@@ -724,40 +806,73 @@ function AdminDashboard() {
   );
   const [invite, setInvite] = useState({
     email: "",
-    username: "",
     fullName: "",
-    bio: "",
-    specialties: "",
-    chat: 5,
-    voice: 7,
-    video: 10,
-    verified: true,
+    temporaryPassword: "",
   });
+  const [handoff, setHandoff] = useState<string | null>(null);
   async function inviteReader(e: FormEvent) {
     e.preventDefault();
+    let authUserId: string | null = null;
+    let appProvisioned = false;
     try {
-      const result = await api<{ inviteUrl: string }>("/admin/readers", {
+      const authResult = await authClient.admin.createUser({
+        email: invite.email.trim(),
+        password: invite.temporaryPassword,
+        name: invite.fullName.trim(),
+        role: "user",
+      });
+      if (authResult.error) throw new Error(authResult.error.message);
+      authUserId = authResult.data.user.id;
+
+      await api<{ userId: string }>("/admin/readers/provision", {
         method: "POST",
         body: JSON.stringify({
-          ...invite,
-          specialties: invite.specialties
-            .split(",")
-            .map((v) => v.trim())
-            .filter(Boolean),
-          pricing: {
-            chat: invite.chat * 100,
-            voice: invite.voice * 100,
-            video: invite.video * 100,
-          },
+          neonAuthUserId: authUserId,
+          email: invite.email.trim(),
+          fullName: invite.fullName.trim(),
         }),
       });
-      await navigator.clipboard
-        .writeText(result.inviteUrl)
-        .catch(() => undefined);
-      setNotice(`Reader invite created and copied: ${result.inviteUrl}`);
-      await users.refresh();
+      appProvisioned = true;
+      const handoffText = [
+        "SoulSeer reader account",
+        `Sign in: ${window.location.origin}/login`,
+        `Email: ${invite.email.trim()}`,
+        `Temporary password: ${invite.temporaryPassword}`,
+        "After signing in, choose your public username and complete your reader profile. Please change this temporary password after your first sign-in.",
+      ].join("\n");
+      try {
+        await navigator.clipboard.writeText(handoffText);
+        setNotice(`Reader account created. Handoff details copied. The reader can choose their username and complete their profile after signing in.`);
+      } catch {
+        setHandoff(handoffText);
+        setNotice("Reader account created. Copy the handoff details shown below and give them to the reader securely.");
+      }
+      setInvite({ email: "", fullName: "", temporaryPassword: "" });
+      await Promise.all([users.refresh(), readerProfiles.refresh()]).catch(() => {
+        setNotice("Reader account created. Refresh the dashboard if the Readers list does not update.");
+      });
     } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : "Invite failed.");
+      let rollbackFailed = false;
+      // Compensate only for a confirmed HTTP rejection. A network failure can
+      // happen after the Worker committed, so deleting Auth then could orphan
+      // the app account.
+      if (authUserId && !appProvisioned && cause instanceof ApiError) {
+        try {
+          const rollback = await authClient.admin.removeUser({ userId: authUserId });
+          rollbackFailed = Boolean(rollback.error);
+        } catch {
+          rollbackFailed = true;
+        }
+      }
+      const uncertain = authUserId && !appProvisioned && !(cause instanceof ApiError);
+      setNotice(
+        appProvisioned
+          ? `Reader account created, but a later step failed. ${inviteErrorMessage(cause)}`
+          : uncertain
+          ? `Could not confirm reader account setup. Check the Readers list before retrying; the account may already exist. ${inviteErrorMessage(cause)}`
+          : `Reader setup failed${rollbackFailed ? "; the login could not be rolled back, so check Neon Auth before retrying" : ""}: ${inviteErrorMessage(cause)}`,
+      );
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }
   async function readerAction(
@@ -772,15 +887,41 @@ function AdminDashboard() {
       window.open(result.url, "_blank", "noopener");
       return;
     }
-    await api(`/admin/readers/${user.id}`, {
-      method: "PATCH",
-      body: JSON.stringify(
+    try {
+      if (action === "verify") {
+        await api(`/admin/readers/${user.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ verificationStatus: "verified" }),
+        });
+      } else {
+        if (
+          action === "suspend" &&
+          !window.confirm(
+            `Suspend ${user.fullName}? They will be signed out of everything until reactivated.`,
+          )
+        )
+          return;
+        await api(`/admin/users/${user.id}/status`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            status: action === "suspend" ? "suspended" : "active",
+          }),
+        });
+      }
+      setNotice(
         action === "verify"
-          ? { verificationStatus: "verified" }
-          : { status: action === "suspend" ? "suspended" : "active" },
-      ),
-    });
-    await users.refresh();
+          ? `${user.fullName} is verified.`
+          : action === "suspend"
+            ? `${user.fullName} is suspended.`
+            : `${user.fullName} is active again.`,
+      );
+      await Promise.all([users.refresh(), readerProfiles.refresh()]);
+    } catch (cause) {
+      setNotice(
+        `Action failed: ${cause instanceof Error ? cause.message : "please try again."}`,
+      );
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
   async function adjust(user: AdminUser) {
     const dollars = window.prompt(
@@ -863,9 +1004,12 @@ function AdminDashboard() {
           "users",
           "readers",
           "readings",
+          "transcripts",
           "ledger",
+          "finance",
           "payouts",
           "moderation",
+          "analytics",
         ].map((item) => (
           <button
             className={tab === item ? "active" : ""}
@@ -886,55 +1030,85 @@ function AdminDashboard() {
         </DashboardSection>
       )}
       {tab === "readers" && (
-        <DashboardSection icon={<Check />} title="Invite a Reader">
+        <DashboardSection icon={<Check />} title="Set up a Reader account">
           <form className="admin-form" onSubmit={inviteReader}>
-            {["email", "username", "fullName", "specialties"].map((k) => (
-              <label key={k}>
-                {k.replace(/([A-Z])/g, " $1")}
-                <input
-                  required
-                  value={invite[k as keyof typeof invite] as string}
-                  onChange={(e) =>
-                    setInvite({ ...invite, [k]: e.target.value })
-                  }
-                />
-              </label>
-            ))}
-            <label className="wide">
-              Bio
-              <textarea
+            <label>
+              Full name
+              <input
                 required
-                rows={4}
-                value={invite.bio}
-                onChange={(e) => setInvite({ ...invite, bio: e.target.value })}
+                minLength={2}
+                maxLength={100}
+                autoComplete="name"
+                value={invite.fullName}
+                onChange={(e) => setInvite({ ...invite, fullName: e.target.value })}
               />
             </label>
-            {(["chat", "voice", "video"] as const).map((k) => (
-              <label key={k}>
-                {k} $/min
-                <input
-                  required
-                  type="number"
-                  min="1"
-                  value={invite[k]}
-                  onChange={(e) =>
-                    setInvite({ ...invite, [k]: Number(e.target.value) })
-                  }
-                />
-              </label>
-            ))}
-            <label className="check">
+            <label>
+              Email address
               <input
-                type="checkbox"
-                checked={invite.verified}
-                onChange={(e) =>
-                  setInvite({ ...invite, verified: e.target.checked })
-                }
-              />{" "}
-              Pre-verify Reader
+                required
+                type="email"
+                maxLength={254}
+                autoComplete="email"
+                value={invite.email}
+                onChange={(e) => setInvite({ ...invite, email: e.target.value })}
+              />
             </label>
-            <Button>Generate secure invite</Button>
+            <label>
+              Temporary password
+              <input
+                required
+                type="password"
+                minLength={8}
+                maxLength={128}
+                autoComplete="new-password"
+                value={invite.temporaryPassword}
+                onChange={(e) =>
+                  setInvite({ ...invite, temporaryPassword: e.target.value })
+                }
+              />
+            </label>
+            <p className="wide">
+              The Reader will choose a username, verify their email, and complete their profile after signing in.
+            </p>
+            <Button>Create Reader account</Button>
           </form>
+          {handoff && (
+            <div className="stack-form compact" role="status">
+              <label>
+                Handoff details
+                <textarea readOnly rows={5} value={handoff} />
+              </label>
+              <Button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(handoff);
+                    setHandoff(null);
+                    setNotice("Handoff details copied. Give them to the reader securely.");
+                  } catch {
+                    setNotice("Clipboard access is unavailable. Select and copy the handoff text above, then hide it when finished.");
+                  }
+                }}
+              >
+                Copy and hide handoff details
+              </Button>
+              <Button type="button" onClick={() => setHandoff(null)}>
+                Hide handoff details
+              </Button>
+            </div>
+          )}
+        </DashboardSection>
+      )}
+      {tab === "readers" && (
+        <DashboardSection icon={<Users />} title="Reader profiles">
+          <AdminReaderProfiles
+            readers={readerProfiles.data?.readers ?? []}
+            onSaved={async () => {
+              setNotice("Reader profile saved.");
+              await Promise.all([readerProfiles.refresh(), users.refresh()]);
+            }}
+          />
         </DashboardSection>
       )}
       {tab === "readings" && (
@@ -944,6 +1118,8 @@ function AdminDashboard() {
               <thead>
                 <tr>
                   <th>Created</th>
+                  <th>Client</th>
+                  <th>Reader</th>
                   <th>Type</th>
                   <th>Status</th>
                   <th>Duration</th>
@@ -957,6 +1133,8 @@ function AdminDashboard() {
                 {readings.data?.readings.map((r) => (
                   <tr key={r.id}>
                     <td>{dateTime(r.createdAt)}</td>
+                    <td>{r.clientName ?? "Deleted account"}</td>
+                    <td>{r.readerName ?? "Deleted account"}</td>
                     <td>{r.type}</td>
                     <td>
                       <span className={`status ${r.status}`}>{r.status}</span>
@@ -965,7 +1143,14 @@ function AdminDashboard() {
                     <td>{money(r.totalPrice)}</td>
                     <td>{r.eventCount}</td>
                     <td>{r.failureReason ?? "—"}</td>
-                    <td>
+                    <td className="row-actions">
+                      <button
+                        onClick={() => {
+                          setOpenReading(r.id);
+                        }}
+                      >
+                        View record
+                      </button>
                       {r.status === "ended" &&
                         r.paymentStatus !== "refunded" && (
                           <button onClick={() => void refund(r)}>Refund</button>
@@ -978,12 +1163,32 @@ function AdminDashboard() {
           </div>
         </DashboardSection>
       )}
+      {openReading && (
+        <ReadingRecordModal
+          readingId={openReading}
+          onClose={() => {
+            setOpenReading(null);
+          }}
+        />
+      )}
+      {tab === "transcripts" && (
+        <DashboardSection icon={<History />} title="Reading transcripts">
+          <AdminTranscripts />
+        </DashboardSection>
+      )}
       {tab === "ledger" && (
-        <DashboardSection
-          icon={<Banknote />}
-          title="Immutable transaction ledger"
-        >
-          <LedgerTable rows={ledger.data?.transactions ?? []} />
+        <DashboardSection icon={<Banknote />} title="Complete transaction history">
+          <AdminLedger />
+        </DashboardSection>
+      )}
+      {tab === "finance" && (
+        <DashboardSection icon={<CircleDollarSign />} title="Revenue report">
+          <AdminRevenue />
+        </DashboardSection>
+      )}
+      {tab === "analytics" && (
+        <DashboardSection icon={<Activity />} title="Analytics">
+          <AdminAnalytics />
         </DashboardSection>
       )}
       {tab === "payouts" && (
@@ -1023,51 +1228,12 @@ function AdminDashboard() {
         </DashboardSection>
       )}
       {tab === "moderation" && (
-        <DashboardSection icon={<Shield />} title="Flagged content">
-          <div className="request-list">
-            {flags.data?.flags.length ? (
-              flags.data.flags.map((f) => (
-                <article key={f.id}>
-                  <div>
-                    <strong>{f.reason}</strong>
-                    <small>
-                      {f.postId ? `Post ${f.postId}` : `Comment ${f.commentId}`}{" "}
-                      · {dateTime(f.createdAt)}
-                    </small>
-                  </div>
-                  <div className="row-actions">
-                    <Button
-                      className="secondary"
-                      onClick={async () => {
-                        await api(`/admin/forum/flags/${f.id}`, {
-                          method: "PATCH",
-                          body: JSON.stringify({ status: "dismissed" }),
-                        });
-                        await flags.refresh();
-                      }}
-                    >
-                      Dismiss
-                    </Button>
-                    <Button
-                      onClick={async () => {
-                        await api(`/admin/forum/flags/${f.id}`, {
-                          method: "PATCH",
-                          body: JSON.stringify({ status: "actioned" }),
-                        });
-                        await flags.refresh();
-                      }}
-                    >
-                      Actioned
-                    </Button>
-                  </div>
-                </article>
-              ))
-            ) : (
-              <Empty title="Moderation queue is clear">
-                There are no open community reports.
-              </Empty>
-            )}
-          </div>
+        <DashboardSection icon={<Shield />} title="Content review queue">
+          <AdminModeration
+            onChanged={async () => {
+              await Promise.all([flags.refresh(), users.refresh()]);
+            }}
+          />
         </DashboardSection>
       )}
     </div>
@@ -1124,15 +1290,16 @@ function AdminUsers({
                         Verify
                       </button>
                     )}
-                  {u.status === "active" ? (
-                    <button onClick={() => void onAction(u, "suspend")}>
-                      Suspend
-                    </button>
-                  ) : (
-                    <button onClick={() => void onAction(u, "activate")}>
-                      Reactivate
-                    </button>
-                  )}
+                  {u.role !== "admin" &&
+                    (u.status === "active" ? (
+                      <button onClick={() => void onAction(u, "suspend")}>
+                        Suspend
+                      </button>
+                    ) : u.status === "suspended" ? (
+                      <button onClick={() => void onAction(u, "activate")}>
+                        Reactivate
+                      </button>
+                    ) : null)}
                 </div>
               </td>
             </tr>
@@ -1196,7 +1363,7 @@ function ReadingTable({
           {rows.map((r) => (
             <tr key={r.id}>
               <td>{r.counterpartName ?? "Private client"}</td>
-              <td>{dateTime(r.startedAt ?? r.completedAt)}</td>
+              <td>{dateTime(r.startedAt ?? r.completedAt ?? r.createdAt)}</td>
               <td>{r.type}</td>
               <td>
                 <span className={`status ${r.status}`}>{r.status}</span>
@@ -1255,4 +1422,27 @@ function LedgerTable({ rows }: { rows: LedgerEntry[] }) {
       </table>
     </div>
   );
+}
+
+const INVITE_FIELD_LABELS: Record<string, string> = {
+  email: "Email",
+  fullName: "Full name",
+  temporaryPassword: "Temporary password (at least 8 characters)",
+};
+
+function inviteErrorMessage(cause: unknown) {
+  if (!(cause instanceof Error)) return "Please try again.";
+  // The API returns zod's tree format ({ properties: { field: … } }); older
+  // deployments used the flattened format ({ fieldErrors: { field: … } }).
+  const details =
+    cause instanceof ApiError && typeof cause.details === "object" && cause.details !== null
+      ? (cause.details as {
+          properties?: Record<string, unknown>;
+          fieldErrors?: Record<string, unknown>;
+        })
+      : null;
+  const fields = Object.keys(details?.properties ?? details?.fieldErrors ?? {});
+  return fields.length
+    ? `check ${fields.map((f) => INVITE_FIELD_LABELS[f] ?? f).join(", ")}.`
+    : cause.message;
 }

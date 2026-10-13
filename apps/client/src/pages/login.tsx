@@ -2,35 +2,83 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import { authClient } from "../lib/auth";
-import { api } from "../lib/api";
+import { ApiError, api } from "../lib/api";
 import { useSoulAuth } from "../components/auth-context";
 import { Button, Notice } from "../components/ui";
 
+const PENDING_VERIFICATION_EMAIL = "soulseer.pendingVerificationEmail";
+// Kept until the profile is created so a Reader who leaves mid-signup (or is
+// sent back to /login without the link's query string) still becomes a Reader.
+const PENDING_READER_INVITE = "soulseer.pendingReaderInvite";
+
+function storedReaderInvite() {
+  try {
+    return localStorage.getItem(PENDING_READER_INVITE) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function storeReaderInvite(token: string | null) {
+  try {
+    if (token) localStorage.setItem(PENDING_READER_INVITE, token);
+    else localStorage.removeItem(PENDING_READER_INVITE);
+  } catch {
+    // Storage can be unavailable (private mode); the URL still carries the invite.
+  }
+}
+
 export function LoginPage() {
   const [params] = useSearchParams();
+  const linkInvite = params.get("readerInvite") || params.get("invite") || "";
+  const readerInvite = linkInvite || storedReaderInvite();
   const auth = useSoulAuth();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"signin" | "signup" | "forgot" | "profile">(
-    params.get("complete") ? "profile" : "signin",
+  const pendingVerificationEmail =
+    sessionStorage.getItem(PENDING_VERIFICATION_EMAIL) ?? "";
+  const [mode, setMode] = useState<
+    "signin" | "signup" | "verify" | "forgot" | "profile"
+  >(
+    pendingVerificationEmail
+      ? "verify"
+      : linkInvite
+        ? "signup"
+        : params.get("forgot")
+          ? "forgot"
+          : "signin",
   );
   const [form, setForm] = useState({
-    email: "",
+    email: pendingVerificationEmail,
     password: "",
     name: "",
     username: "",
-    invite: params.get("readerInvite") ?? params.get("invite") ?? "",
+    otp: "",
+    invite: readerInvite,
   });
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{
     tone: "error" | "success";
     text: string;
-  } | null>(null);
+  } | null>(
+    params.get("reset") === "success"
+      ? { tone: "success", text: "Password updated. Sign in with your new password." }
+      : null,
+  );
   const returnTo = params.get("returnTo") || "/dashboard";
   useEffect(() => {
-    if (auth.needsProfile) setMode("profile");
-  }, [auth.needsProfile]);
-  if (auth.me && mode !== "profile") return <Navigate to={returnTo} replace />;
+    if (linkInvite) storeReaderInvite(linkInvite);
+  }, [linkInvite]);
+  useEffect(() => {
+    if (!auth.needsProfile || mode === "verify") return;
+    setMode("profile");
+    setForm((current) => ({
+      ...current,
+      name: current.name || auth.sessionUser?.name || "",
+    }));
+  }, [auth.needsProfile, auth.sessionUser?.name, mode]);
+  if (auth.me && mode !== "verify")
+    return <Navigate to={returnTo} replace />;
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -43,6 +91,21 @@ export function LoginPage() {
           callbackURL: returnTo,
         });
         if (result.error) throw new Error(result.error.message);
+        if (!result.data.user.emailVerified) {
+          const verification = await authClient.emailOtp.sendVerificationOtp({
+            email: form.email,
+            type: "email-verification",
+          });
+          if (verification.error)
+            throw new Error(verification.error.message);
+          sessionStorage.setItem(PENDING_VERIFICATION_EMAIL, form.email);
+          setMode("verify");
+          setMessage({
+            tone: "success",
+            text: "Verify your email with the code we just sent.",
+          });
+          return;
+        }
         await auth.refresh();
         navigate(returnTo);
       } else if (mode === "signup") {
@@ -50,14 +113,47 @@ export function LoginPage() {
           email: form.email,
           password: form.password,
           name: form.name,
-          callbackURL: "/login?complete=1",
+          callbackURL: `${window.location.origin}/login?${new URLSearchParams({
+            returnTo,
+            ...(form.invite ? { readerInvite: form.invite } : {}),
+          }).toString()}`,
         });
         if (result.error) throw new Error(result.error.message);
+        if (!result.data.user.emailVerified) {
+          const verification = await authClient.emailOtp.sendVerificationOtp({
+            email: form.email,
+            type: "email-verification",
+          });
+          if (verification.error)
+            throw new Error(verification.error.message);
+          sessionStorage.setItem(PENDING_VERIFICATION_EMAIL, form.email);
+          setMode("verify");
+          setMessage({
+            tone: "success",
+            text: "We sent a verification code to your email.",
+          });
+        } else {
+          setMode("profile");
+        }
+      } else if (mode === "verify") {
+        const result = await authClient.emailOtp.verifyEmail({
+          email: form.email,
+          otp: form.otp,
+        });
+        if (result.error) throw new Error(result.error.message);
+        if (!result.data.user.emailVerified)
+          throw new Error("Email verification did not complete.");
+        sessionStorage.removeItem(PENDING_VERIFICATION_EMAIL);
+        await auth.refresh();
         setMode("profile");
+        setMessage({
+          tone: "success",
+          text: "Email verified. Choose your community username.",
+        });
       } else if (mode === "forgot") {
         const result = await authClient.requestPasswordReset({
           email: form.email,
-          redirectTo: `${window.location.origin}/login`,
+          redirectTo: `${window.location.origin}/reset-password`,
         });
         if (result.error) throw new Error(result.error.message);
         setMessage({
@@ -73,16 +169,58 @@ export function LoginPage() {
             ...(form.invite ? { readerInviteToken: form.invite } : {}),
           }),
         });
+        storeReaderInvite(null);
         await auth.refresh();
         navigate(returnTo);
       }
+    } catch (cause) {
+      // An expired or mismatched invitation can never succeed, so stop
+      // sending it; the next submit creates an ordinary client profile.
+      const inviteConflict =
+        cause instanceof ApiError &&
+        cause.code === "PROFILE_CONFLICT" &&
+        Boolean(form.invite);
+      const deadInvite =
+        (cause instanceof ApiError && cause.code === "INVALID_READER_INVITE") ||
+        inviteConflict;
+      if (deadInvite) {
+        storeReaderInvite(null);
+        setForm((current) => ({ ...current, invite: "" }));
+      }
+      setMessage({
+        tone: "error",
+        text: inviteConflict
+          ? "The email or username on this Reader invitation is already in use. Ask SoulSeer for a new invitation, or submit again to join as a client."
+          : deadInvite
+          ? "This Reader invitation is invalid, expired, or was sent to a different email. Ask SoulSeer for a new invitation, or submit again to join as a client."
+          : cause instanceof Error
+            ? cause.message
+            : "We couldn’t complete that request.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function resendVerification() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await authClient.emailOtp.sendVerificationOtp({
+        email: form.email,
+        type: "email-verification",
+      });
+      if (result.error) throw new Error(result.error.message);
+      setMessage({
+        tone: "success",
+        text: "A new verification code is on its way.",
+      });
     } catch (cause) {
       setMessage({
         tone: "error",
         text:
           cause instanceof Error
             ? cause.message
-            : "We couldn’t complete that request.",
+            : "We couldn’t resend the verification code.",
       });
     } finally {
       setBusy(false);
@@ -112,31 +250,42 @@ export function LoginPage() {
             {mode === "signin"
               ? "Welcome back"
               : mode === "signup"
-                ? "Join the soul tribe"
-                : mode === "forgot"
-                  ? "Reset your password"
-                  : "Complete your profile"}
+                ? form.invite
+                  ? "Create your reader account"
+                  : "Join the soul tribe"
+                : mode === "verify"
+                  ? "Verify your email"
+                  : mode === "forgot"
+                    ? "Reset your password"
+                    : "Complete your profile"}
           </h2>
           <p className="muted">
-            {mode === "profile"
-              ? "Choose how you’ll appear in the SoulSeer community."
-              : "Your account is securely managed by Neon Auth."}
+            {mode === "verify"
+              ? `Enter the code sent to ${form.email}.`
+              : mode === "profile"
+                ? "Choose how you’ll appear in the SoulSeer community."
+                : form.invite
+                  ? "Use the email address your reader invitation was sent to."
+                  : "Your account is securely managed by Neon Auth."}
           </p>
           {message && <Notice tone={message.tone}>{message.text}</Notice>}
-          {mode !== "profile" && mode !== "forgot" && (
+          {(mode === "signin" || mode === "signup") && (
             <button
               className="google-button"
               onClick={() =>
                 void authClient.signIn.social({
                   provider: "google",
-                  callbackURL: `${window.location.origin}/login?complete=1`,
+                  callbackURL: `${window.location.origin}/login?${new URLSearchParams({
+                    returnTo,
+                    ...(form.invite ? { readerInvite: form.invite } : {}),
+                  }).toString()}`,
                 })
               }
             >
               <span>G</span> Continue with Google
             </button>
           )}
-          {mode !== "profile" && mode !== "forgot" && (
+          {(mode === "signin" || mode === "signup") && (
             <div className="divider">
               <span>or use email</span>
             </div>
@@ -171,7 +320,7 @@ export function LoginPage() {
                 />
               </label>
             )}
-            {mode !== "profile" && (
+            {mode !== "profile" && mode !== "verify" && (
               <label>
                 Email address
                 <input
@@ -183,7 +332,7 @@ export function LoginPage() {
                 />
               </label>
             )}
-            {mode !== "forgot" && mode !== "profile" && (
+            {(mode === "signin" || mode === "signup") && (
               <label>
                 Password
                 <span className="password-field">
@@ -209,6 +358,21 @@ export function LoginPage() {
                 </span>
               </label>
             )}
+            {mode === "verify" && (
+              <label>
+                Verification code
+                <input
+                  required
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  minLength={6}
+                  maxLength={6}
+                  pattern="[0-9]{6}"
+                  value={form.otp}
+                  onChange={(e) => setForm({ ...form, otp: e.target.value })}
+                />
+              </label>
+            )}
             <Button disabled={busy}>
               {busy
                 ? "Please wait…"
@@ -216,11 +380,25 @@ export function LoginPage() {
                   ? "Sign in"
                   : mode === "signup"
                     ? "Create account"
-                    : mode === "forgot"
-                      ? "Send reset link"
-                      : "Enter SoulSeer"}
+                    : mode === "verify"
+                      ? "Verify email"
+                      : mode === "forgot"
+                        ? "Send reset link"
+                        : "Enter SoulSeer"}
             </Button>
           </form>
+          {mode === "verify" && (
+            <button
+              type="button"
+              className="plain-link"
+              disabled={busy}
+              onClick={() => {
+                void resendVerification();
+              }}
+            >
+              Resend verification code
+            </button>
+          )}
           {mode === "signin" && (
             <>
               <button className="plain-link" onClick={() => setMode("forgot")}>
@@ -234,7 +412,7 @@ export function LoginPage() {
               </p>
             </>
           )}
-          {(mode === "signup" || mode === "forgot") && (
+          {(mode === "signup" || mode === "verify" || mode === "forgot") && (
             <p className="switch-auth">
               Already belong?{" "}
               <button onClick={() => setMode("signin")}>Sign in</button>

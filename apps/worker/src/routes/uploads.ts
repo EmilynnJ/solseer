@@ -4,6 +4,7 @@ import {
   MAX_PROFILE_IMAGE_BYTES,
   profileImageMetadataSchema,
   readerProfiles,
+  uuidSchema,
 } from "@soulseer/shared";
 import type { AppBindings } from "../types";
 import { requireRole, requireUser } from "../lib/auth";
@@ -32,6 +33,13 @@ uploadRoutes.post(
       actor.role === "admin" ? context.req.query("readerId") : actor.id;
     if (!targetUserId)
       throw new AppError(400, "READER_REQUIRED", "A Reader id is required.");
+    if (!uuidSchema.safeParse(targetUserId).success) {
+      throw new AppError(
+        400,
+        "INVALID_UUID",
+        "The parameter 'readerId' must be a valid UUID.",
+      );
+    }
     const { db } = createDatabase(context.env.DATABASE_URL);
     const [reader] = await db
       .select({ id: readerProfiles.userId })
@@ -43,7 +51,9 @@ uploadRoutes.post(
     const extension =
       input.contentType === "image/jpeg"
         ? "jpg"
-        : input.contentType.split("/")[1];
+        : input.contentType === "image/png"
+          ? "png"
+          : "webp";
     const capability: UploadCapability = {
       userId: targetUserId,
       key: `readers/${targetUserId}/${crypto.randomUUID()}.${extension}`,
@@ -114,10 +124,10 @@ uploadRoutes.put(
         "UPLOAD_EXPIRED",
         "Upload authorization has expired.",
       );
-    const bodyLength = Number(context.req.header("Content-Length") ?? 0);
+    const bytes = new Uint8Array(await context.req.arrayBuffer());
     if (
-      bodyLength !== capability.size ||
-      bodyLength > MAX_PROFILE_IMAGE_BYTES
+      bytes.byteLength !== capability.size ||
+      bytes.byteLength > MAX_PROFILE_IMAGE_BYTES
     ) {
       throw new AppError(
         400,
@@ -132,7 +142,6 @@ uploadRoutes.put(
         "The uploaded image type does not match its authorization.",
       );
     }
-    const bytes = new Uint8Array(await context.req.arrayBuffer());
     if (!matchesImageSignature(bytes, capability.contentType)) {
       throw new AppError(
         400,

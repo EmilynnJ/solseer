@@ -4,7 +4,7 @@ SoulSeer's initial public-launch monorepo for pay-per-minute chat, voice, and vi
 
 ## Packages
 
-- `apps/client` — React + Vite mobile-first frontend deployed to Vercel.
+- `apps/client` — React + Vite mobile-first frontend deployed as a Render Static Site (the former Vercel deployment was deleted).
 - `apps/worker` — Cloudflare Worker API, verified webhooks, R2 access, and one Durable Object per reading.
 - `packages/shared` — Drizzle schema, Zod contracts, types, constants, and billing rules.
 

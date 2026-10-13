@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, asc, count, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import {
   FORUM_PAGE_SIZE,
   createForumCommentSchema,
@@ -15,6 +15,12 @@ import type { AppBindings } from "../types";
 import { requireRole, requireUser } from "../lib/auth";
 import { createDatabase } from "../lib/db";
 import { AppError } from "../lib/errors";
+import { validateUuidParams } from "../lib/http";
+import {
+  automatedFlagReason,
+  isReservedFlagReason,
+  scanContent,
+} from "../lib/content-scan";
 
 export const forumRoutes = new Hono<AppBindings>();
 
@@ -30,19 +36,18 @@ forumRoutes.get("/posts", async (context) => {
       isLocked: forumPosts.isLocked,
       createdAt: forumPosts.createdAt,
       authorName: users.username,
-      commentCount: count(forumComments.id),
+      // ⚡ Bolt: Correlated subquery for counting comments instead of LEFT JOIN + GROUP BY
+      // Prevents memory bloat during pagination and significantly improves performance
+      commentCount: sql<number>`(
+        select count(*)::int
+        from ${forumComments}
+        where ${forumComments.postId} = ${forumPosts.id}
+        and ${forumComments.status} = 'visible'
+      )`,
     })
     .from(forumPosts)
     .innerJoin(users, eq(users.id, forumPosts.authorId))
-    .leftJoin(
-      forumComments,
-      and(
-        eq(forumComments.postId, forumPosts.id),
-        eq(forumComments.status, "visible"),
-      ),
-    )
     .where(eq(forumPosts.status, "visible"))
-    .groupBy(forumPosts.id, users.username)
     .orderBy(desc(forumPosts.createdAt))
     .limit(FORUM_PAGE_SIZE)
     .offset((page - 1) * FORUM_PAGE_SIZE);
@@ -60,14 +65,29 @@ forumRoutes.post("/posts", requireUser, async (context) => {
     );
   }
   const { db } = createDatabase(context.env.DATABASE_URL);
-  const [post] = await db
+  const flagReason =
+    user.role !== "admin"
+      ? automatedFlagReason(scanContent(`${input.title}\n${input.body}`))
+      : null;
+  // The post and its automated flag are written in one transaction so a
+  // flagged post is never published without its report.
+  const id = crypto.randomUUID();
+  const insertPost = db
     .insert(forumPosts)
-    .values({ ...input, authorId: user.id })
+    .values({ id, ...input, authorId: user.id })
     .returning();
+  const [[post]] = flagReason
+    ? await db.batch([
+        insertPost,
+        db
+          .insert(forumFlags)
+          .values({ reporterId: user.id, postId: id, reason: flagReason }),
+      ])
+    : [await insertPost];
   return context.json({ post }, 201);
 });
 
-forumRoutes.get("/posts/:id", async (context) => {
+forumRoutes.get("/posts/:id", validateUuidParams("id"), async (context) => {
   const { db } = createDatabase(context.env.DATABASE_URL);
   const [post] = await db
     .select({
@@ -109,7 +129,7 @@ forumRoutes.get("/posts/:id", async (context) => {
   return context.json({ post, comments });
 });
 
-forumRoutes.post("/posts/:id/comments", requireUser, async (context) => {
+forumRoutes.post("/posts/:id/comments", requireUser, validateUuidParams("id"), async (context) => {
   const input = createForumCommentSchema.parse(await context.req.json());
   const postId = context.req.param("id");
   const { db } = createDatabase(context.env.DATABASE_URL);
@@ -139,18 +159,34 @@ forumRoutes.post("/posts/:id/comments", requireUser, async (context) => {
       );
     }
   }
-  const [comment] = await db
+  const user = context.get("user");
+  // Automated flags record the author as reporter because reporter_id is
+  // required; the "Automated scan:" reason prefix marks them in the queue.
+  const flagReason =
+    user.role !== "admin" ? automatedFlagReason(scanContent(input.body)) : null;
+  const id = crypto.randomUUID();
+  const insertComment = db
     .insert(forumComments)
-    .values({ postId, authorId: context.get("user").id, ...input })
+    .values({ id, postId, authorId: user.id, ...input })
     .returning();
+  const [[comment]] = flagReason
+    ? await db.batch([
+        insertComment,
+        db
+          .insert(forumFlags)
+          .values({ reporterId: user.id, commentId: id, reason: flagReason }),
+      ])
+    : [await insertComment];
   return context.json({ comment }, 201);
 });
 
-forumRoutes.post("/posts/:id/flag", requireUser, async (context) => {
+forumRoutes.post("/posts/:id/flag", requireUser, validateUuidParams("id"), async (context) => {
   const input = flagContentSchema.parse({
     ...(await context.req.json()),
     postId: context.req.param("id"),
   });
+  if (isReservedFlagReason(input.reason))
+    throw new AppError(400, "RESERVED_REASON", "Please describe the problem in your own words.");
   const { db } = createDatabase(context.env.DATABASE_URL);
   const [flag] = await db
     .insert(forumFlags)
@@ -159,11 +195,13 @@ forumRoutes.post("/posts/:id/flag", requireUser, async (context) => {
   return context.json({ flag }, 201);
 });
 
-forumRoutes.post("/comments/:id/flag", requireUser, async (context) => {
+forumRoutes.post("/comments/:id/flag", requireUser, validateUuidParams("id"), async (context) => {
   const input = flagContentSchema.parse({
     ...(await context.req.json()),
     commentId: context.req.param("id"),
   });
+  if (isReservedFlagReason(input.reason))
+    throw new AppError(400, "RESERVED_REASON", "Please describe the problem in your own words.");
   const { db } = createDatabase(context.env.DATABASE_URL);
   const [flag] = await db
     .insert(forumFlags)
@@ -176,6 +214,7 @@ forumRoutes.delete(
   "/posts/:id",
   requireUser,
   requireRole("admin"),
+  validateUuidParams("id"),
   async (context) => {
     const { db } = createDatabase(context.env.DATABASE_URL);
     const [post] = await db
@@ -193,6 +232,7 @@ forumRoutes.delete(
   "/comments/:id",
   requireUser,
   requireRole("admin"),
+  validateUuidParams("id"),
   async (context) => {
     const { db } = createDatabase(context.env.DATABASE_URL);
     const [comment] = await db

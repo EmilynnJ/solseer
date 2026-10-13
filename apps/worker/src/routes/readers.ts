@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { and, desc, eq, gt, sql } from "drizzle-orm";
 import {
   READER_HEARTBEAT_FRESH_MS,
+  readerNotificationSettingsSchema,
   readerPricingSchema,
   readerProfileUpdateSchema,
   readerProfiles,
@@ -15,10 +16,13 @@ import type { AppBindings } from "../types";
 import { requireRole, requireUser } from "../lib/auth";
 import { createDatabase } from "../lib/db";
 import { AppError } from "../lib/errors";
+import { validateUuidParams } from "../lib/http";
 
 export const readerRoutes = new Hono<AppBindings>();
 
 function readerSelect() {
+  // ⚡ Bolt: Using correlated subqueries instead of LEFT JOIN + GROUP BY
+  // to avoid large intermediate result sets and memory bloat
   return {
     id: users.id,
     username: users.username,
@@ -31,8 +35,8 @@ function readerSelect() {
     isOnline: readerProfiles.isOnline,
     lastHeartbeatAt: readerProfiles.lastHeartbeatAt,
     profileImageKey: readerProfiles.profileImageKey,
-    rating: sql<number>`coalesce(avg(${reviews.rating}), 0)::float`,
-    reviewCount: sql<number>`count(${reviews.id})::int`,
+    rating: sql<number>`(select coalesce(avg(rating), 0)::float from ${reviews} where ${reviews.readerId} = ${users.id})`,
+    reviewCount: sql<number>`(select count(*)::int from ${reviews} where ${reviews.readerId} = ${users.id})`,
   };
 }
 
@@ -55,9 +59,7 @@ async function listReaders(env: Env, onlineOnly: boolean) {
     .select(readerSelect())
     .from(readerProfiles)
     .innerJoin(users, eq(users.id, readerProfiles.userId))
-    .leftJoin(reviews, eq(reviews.readerId, readerProfiles.userId))
     .where(condition)
-    .groupBy(users.id, readerProfiles.userId)
     .orderBy(
       desc(
         sql`${readerProfiles.isOnline} AND ${readerProfiles.lastHeartbeatAt} > ${freshness}`,
@@ -73,14 +75,13 @@ readerRoutes.get("/online", async (context) =>
   context.json({ readers: await listReaders(context.env, true) }),
 );
 
-readerRoutes.get("/:id", async (context) => {
+readerRoutes.get("/:id", validateUuidParams("id"), async (context) => {
   const { db } = createDatabase(context.env.DATABASE_URL);
   const id = context.req.param("id");
   const [reader] = await db
     .select(readerSelect())
     .from(readerProfiles)
     .innerJoin(users, eq(users.id, readerProfiles.userId))
-    .leftJoin(reviews, eq(reviews.readerId, readerProfiles.userId))
     .where(
       and(
         eq(readerProfiles.userId, id),
@@ -88,7 +89,6 @@ readerRoutes.get("/:id", async (context) => {
         eq(users.status, "active"),
       ),
     )
-    .groupBy(users.id, readerProfiles.userId)
     .limit(1);
   if (!reader) throw new AppError(404, "READER_NOT_FOUND", "Reader not found.");
   const recentReviews = await db
@@ -107,7 +107,7 @@ readerRoutes.get("/:id", async (context) => {
   return context.json({ reader, reviews: recentReviews });
 });
 
-readerRoutes.get("/:id/image", async (context) => {
+readerRoutes.get("/:id/image", validateUuidParams("id"), async (context) => {
   const { db } = createDatabase(context.env.DATABASE_URL);
   const [reader] = await db
     .select({ key: readerProfiles.profileImageKey })
@@ -204,10 +204,54 @@ readerRoutes.patch(
   requireRole("reader"),
   async (context) => {
     const input = readerProfileUpdateSchema.parse(await context.req.json());
+    const { username, ...profileInput } = input;
+    const { db } = createDatabase(context.env.DATABASE_URL);
+    if (username) {
+      try {
+        await db
+          .update(users)
+          .set({ username, updatedAt: new Date() })
+          .where(eq(users.id, context.get("user").id));
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message.includes("users_username_lower_uidx")
+        ) {
+          throw new AppError(
+            409,
+            "USERNAME_TAKEN",
+            "That username is already in use. Choose another one.",
+          );
+        }
+        throw error;
+      }
+    }
+    const [reader] = await db
+      .update(readerProfiles)
+      .set({ ...profileInput, updatedAt: new Date() })
+      .where(eq(readerProfiles.userId, context.get("user").id))
+      .returning();
+    return context.json({ reader });
+  },
+);
+
+readerRoutes.patch(
+  "/notifications",
+  requireUser,
+  requireRole("reader"),
+  async (context) => {
+    const input = readerNotificationSettingsSchema.parse(
+      await context.req.json(),
+    );
     const { db } = createDatabase(context.env.DATABASE_URL);
     const [reader] = await db
       .update(readerProfiles)
-      .set({ ...input, updatedAt: new Date() })
+      .set({
+        phoneNumber: input.phoneNumber,
+        smsNotificationsEnabled: input.smsNotificationsEnabled,
+        smsConsentAt: input.smsNotificationsEnabled ? new Date() : null,
+        updatedAt: new Date(),
+      })
       .where(eq(readerProfiles.userId, context.get("user").id))
       .returning();
     return context.json({ reader });
@@ -224,16 +268,23 @@ readerRoutes.get(
     const [summary] = await db
       .select({
         pendingPayout: pendingPayouts.availableAmount,
-        historicalEarnings: sql<number>`coalesce(sum(case when ${walletLedgerEntries.type} = 'reader_earning' then ${walletLedgerEntries.amount} else 0 end), 0)::int`,
-        todayEarnings: sql<number>`coalesce(sum(case when ${walletLedgerEntries.type} = 'reader_earning' and ${walletLedgerEntries.createdAt} >= date_trunc('day', now()) then ${walletLedgerEntries.amount} else 0 end), 0)::int`,
+        // ⚡ Bolt: Correlated subquery for aggregating earnings instead of LEFT JOIN + GROUP BY
+        historicalEarnings: sql<number>`(
+          select coalesce(sum(amount), 0)::int
+          from ${walletLedgerEntries}
+          where ${walletLedgerEntries.userId} = ${pendingPayouts.readerId}
+          and ${walletLedgerEntries.type} in ('reader_earning', 'message_earning')
+        )`,
+        todayEarnings: sql<number>`(
+          select coalesce(sum(amount), 0)::int
+          from ${walletLedgerEntries}
+          where ${walletLedgerEntries.userId} = ${pendingPayouts.readerId}
+          and ${walletLedgerEntries.type} in ('reader_earning', 'message_earning')
+          and ${walletLedgerEntries.createdAt} >= date_trunc('day', now())
+        )`,
       })
       .from(pendingPayouts)
-      .leftJoin(
-        walletLedgerEntries,
-        eq(walletLedgerEntries.userId, pendingPayouts.readerId),
-      )
-      .where(eq(pendingPayouts.readerId, user.id))
-      .groupBy(pendingPayouts.readerId);
+      .where(eq(pendingPayouts.readerId, user.id));
     const receivedReviews = await db
       .select({
         id: reviews.id,

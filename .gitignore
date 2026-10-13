@@ -41,6 +41,9 @@ build/Release
 node_modules/
 jspm_packages/
 
+# Codex isolated worktrees
+.worktrees/
+
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 
@@ -69,6 +72,14 @@ web_modules/
 .env
 .env.*
 !.env.example
+coverage/
+*.log
+.DS_Store
+.vercel/
+.playwright-cli/
+output/
+
+.env.local
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache

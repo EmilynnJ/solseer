@@ -40,6 +40,9 @@ export const BILLING_INTERVAL_MS = 60_000;
 export const RECONNECTION_GRACE_MS = 120_000;
 export const LOW_BALANCE_MINUTES = 2;
 export const MAX_PROFILE_IMAGE_BYTES = 5 * 1024 * 1024;
+export const MAX_DIRECT_MESSAGE_LENGTH = 8_000;
+export const MIN_PAID_REPLY_CENTS = 100;
+export const MAX_PAID_REPLY_CENTS = 100_000;
 
 export function splitReadingCharge(totalCents: number): {
   readerCents: number;

@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import type { ForumComment, ForumPost } from "../types";
 import { api, dateTime } from "../lib/api";
+import { posthog } from "../lib/posthog";
 import { useApiData } from "../hooks/use-api";
 import { useSoulAuth } from "../components/auth-context";
 import {
@@ -179,6 +180,9 @@ function PostComposer({
     event.preventDefault();
     try {
       await api("/forum/posts", { method: "POST", body: JSON.stringify(form) });
+      posthog.capture("community_post_published", {
+        category: form.category,
+      });
       await onCreated();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to publish.");
@@ -258,6 +262,9 @@ function PostThread({
         method: "POST",
         body: JSON.stringify({ body: reply, parentId }),
       });
+      posthog.capture("community_comment_published", {
+        is_reply: Boolean(parentId),
+      });
       setReply("");
       setParentId(undefined);
       await thread.refresh();
@@ -293,7 +300,12 @@ function PostThread({
             {dateTime(thread.data.post.createdAt)}
           </small>
           {canReply && (
-            <button className="flag-link" onClick={() => void flag()}>
+            <button
+              className="flag-link"
+              aria-label="Flag post"
+              title="Flag post"
+              onClick={() => void flag()}
+            >
               <Flag /> Flag
             </button>
           )}
@@ -315,7 +327,13 @@ function PostThread({
                     >
                       Reply
                     </button>
-                    <button onClick={() => void flag(comment.id)}>Flag</button>
+                    <button
+                      aria-label="Flag comment"
+                      title="Flag comment"
+                      onClick={() => void flag(comment.id)}
+                    >
+                      Flag
+                    </button>
                   </div>
                 )}
               </article>

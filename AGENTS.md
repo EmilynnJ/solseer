@@ -42,3 +42,60 @@ Intent auto-detection, hybrid ranking, session memory, auto-expanding budget.
 ### Multi-Repo
 `run_pipeline` auto-queries all indexed repos. Use `repos: ["alias"]` to scope. Run `index_status` to see aliases.
 <!-- /vexp -->
+
+# SoulSeer deployment topology (verified 2026-10-05)
+
+- **Frontend (`apps/client`): Render Static Site `solseer`** (service `srv-db0t5tad0e5s73d3njeg`), branch `main`, publish dir `apps/client/dist`, custom domain `soul-seer.net`. SPA fallback is a Render Rewrite rule `/*` → `/index.html` (Action **Rewrite**, not Redirect).
+- **The Vercel deployment of the frontend has been deleted.** Do not deploy to, configure, or debug Vercel. Its client configuration and analytics integration have been removed. Any Vercel status on a PR is not the production frontend.
+- **Backend (`apps/worker`): Cloudflare Worker `soulseer-api`** at `api.soul-seer.net`.
+- **Database and auth: Neon.** Application database is `soulseer_app`. Neon Auth uses the separate `neondb` database, restored and verified on 2026-10-07. Both are in use; an empty application schema in `neondb` does not make that auth database disposable. The verified Auth URL is `https://ep-still-mud-aj5bg4yw.neonauth.c-3.us-east-2.aws.neon.tech/neondb/auth`; the client uses it through `VITE_NEON_AUTH_URL`, and the Worker's production issuer/JWKS settings in `wrangler.toml` match it.
+
+# 🚨 SOULSEER SOURCE-OF-TRUTH DEBUGGING RULE — READ BEFORE CHANGING CONFIG
+
+This rule exists because a production debugging loop repeatedly overrode verified current configuration with stale history and consumed days of work.
+
+## Non-negotiable hierarchy
+When debugging SoulSeer, evidence ranks in this order:
+
+1. **Current live provider/service configuration** (Cloudflare, Neon, Render, Stripe/test processor, etc.)
+2. **Current official vendor documentation for the exact product/API in use**
+3. **Current `main` branch and the exact deployed commit/version**
+4. **User-provided current screenshots/logs/verified names**
+5. Historical commits, old PRs, old screenshots, old build guides, memory, aliases, and guesses
+
+Lower-ranked evidence MUST NOT override higher-ranked evidence.
+
+## Exact-name rule
+For provider configuration, secret names, bindings, environment variables, API IDs, routes, and product names are **exact identifiers**, not suggestions.
+
+- Never rename a verified identifier because an old commit used a different spelling.
+- Never infer `REALTIME` vs `REALTIMEKIT`, `APP_ID` aliases, token names, or other provider identifiers from memory or repository history.
+- Never add broad fallback aliases to "make it work" unless the current provider documentation explicitly supports them and the change is required.
+- If the user says a current identifier is exact, treat that as a locked fact until direct current evidence disproves it.
+
+## Before any production config change
+Before editing `wrangler.toml`, environment bindings, provider adapters, auth config, deployment config, or secret references:
+
+1. Inspect the **current** target file on the branch being changed.
+2. Inspect the **current live provider configuration** when accessible.
+3. Check the **current official documentation** when the provider naming or behavior is in question.
+4. Compare those sources explicitly.
+5. State the proven mismatch before changing code.
+6. Make the smallest targeted change.
+7. Verify build/deploy status and the resulting deployed version before declaring success.
+
+If live provider configuration cannot be inspected, SAY SO. Do not substitute historical configuration and present it as current truth.
+
+## Settled-fact rule
+Once a configuration fact has been verified, **do not reopen it without new direct evidence**.
+
+A failed downstream request is not evidence that an already-verified token name, binding name, app ID, route, or provider identifier should be renamed again. Investigate the next layer instead.
+
+## User correction rule
+When the user says the debugging direction is reversed, a name is wrong, or a current provider value has already been verified:
+
+- Stop the current hypothesis.
+- Re-check the cited current source immediately.
+- Do not continue making changes under the disputed assumption.
+
+The goal is to debug the product, not to make the user repeatedly re-prove facts that were already established.

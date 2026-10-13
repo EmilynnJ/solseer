@@ -3,6 +3,20 @@ ALTER TABLE "forum_comments"
   FOREIGN KEY ("parent_id") REFERENCES "forum_comments"("id")
   ON DELETE CASCADE;--> statement-breakpoint
 
+-- Neon Auth/Data API databases already provide auth.user_id() in a protected
+-- schema. Only install the fail-closed compatibility function when it is
+-- absent, so migrations do not try to replace Neon's managed function.
+DO $compat$
+BEGIN
+  IF to_regprocedure('auth.user_id()') IS NULL THEN
+    IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'auth') THEN
+      EXECUTE 'CREATE SCHEMA auth';
+    END IF;
+    EXECUTE 'CREATE FUNCTION auth.user_id() RETURNS text LANGUAGE sql STABLE AS $fn$ SELECT NULL::text $fn$';
+  END IF;
+END
+$compat$;--> statement-breakpoint
+
 CREATE OR REPLACE FUNCTION public.app_user_id()
 RETURNS uuid
 LANGUAGE sql

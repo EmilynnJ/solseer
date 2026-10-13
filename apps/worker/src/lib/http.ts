@@ -1,5 +1,26 @@
 import type { MiddlewareHandler } from "hono";
+import { uuidSchema } from "@soulseer/shared";
 import { AppError } from "./errors";
+import { logger } from "./log";
+
+export function validateUuidParams(...names: string[]): MiddlewareHandler {
+  return async (context, next) => {
+    for (const name of names) {
+      const value = context.req.param(name);
+      if (value) {
+        const result = uuidSchema.safeParse(value);
+        if (!result.success) {
+          throw new AppError(
+            400,
+            "INVALID_UUID",
+            `The parameter '${name}' must be a valid UUID.`,
+          );
+        }
+      }
+    }
+    await next();
+  };
+}
 
 export const securityHeaders: MiddlewareHandler = async (context, next) => {
   await next();
@@ -26,22 +47,32 @@ export const exactOriginCors: MiddlewareHandler<{ Bindings: Env }> = async (
   next,
 ) => {
   const origin = context.req.header("Origin");
-  if (origin && origin !== context.env.FRONTEND_ORIGIN) {
+  // FRONTEND_ORIGINS is typed as a required string, but a bad `wrangler
+  // deploy`/dashboard edit can still leave the binding unset at runtime; a
+  // missing var here must not crash every /api/* request.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  const frontendOrigins = context.env.FRONTEND_ORIGINS ?? "";
+  const allowedOrigins = new Set([
+    context.env.FRONTEND_ORIGIN,
+    ...frontendOrigins.split(",").map((value) => value.trim()).filter(Boolean),
+  ]);
+  if (origin && !allowedOrigins.has(origin)) {
     throw new AppError(
       403,
       "ORIGIN_NOT_ALLOWED",
       "This request origin is not allowed.",
     );
   }
+  const responseOrigin = origin ?? context.env.FRONTEND_ORIGIN;
 
   if (context.req.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
       headers: {
-        "Access-Control-Allow-Origin": context.env.FRONTEND_ORIGIN,
+        "Access-Control-Allow-Origin": responseOrigin,
         "Access-Control-Allow-Credentials": "true",
         "Access-Control-Allow-Headers":
-          "Authorization, Content-Type, Idempotency-Key",
+          "Authorization, Content-Type, Idempotency-Key, X-SoulSeer-Upload-Capability, X-SoulSeer-Upload-Signature",
         "Access-Control-Allow-Methods":
           "GET, POST, PATCH, PUT, DELETE, OPTIONS",
         "Access-Control-Max-Age": "86400",
@@ -51,7 +82,7 @@ export const exactOriginCors: MiddlewareHandler<{ Bindings: Env }> = async (
   }
 
   await next();
-  context.header("Access-Control-Allow-Origin", context.env.FRONTEND_ORIGIN);
+  context.header("Access-Control-Allow-Origin", responseOrigin);
   context.header("Access-Control-Allow-Credentials", "true");
   context.header("Vary", "Origin");
 };
@@ -85,6 +116,17 @@ export const rateLimit: MiddlewareHandler<{ Bindings: Env }> = async (
   next,
 ) => {
   if (new URL(context.req.url).pathname.startsWith("/api/webhooks/")) {
+    await next();
+    return;
+  }
+  // RATE_LIMITER is typed as a required binding, but a bad `wrangler
+  // deploy`/dashboard edit can still leave it unbound at runtime; fail open
+  // rather than 500ing every /api/* request.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  if (!context.env.RATE_LIMITER) {
+    logger.warn("RATE_LIMITER binding is missing; skipping rate limit.", {
+      route: new URL(context.req.url).pathname,
+    });
     await next();
     return;
   }

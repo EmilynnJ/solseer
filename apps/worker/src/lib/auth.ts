@@ -1,6 +1,10 @@
 import { eq } from "drizzle-orm";
 import type { MiddlewareHandler } from "hono";
-import { createRemoteJWKSet, jwtVerify } from "jose";
+import {
+  createRemoteJWKSet,
+  jwtVerify,
+  type JWTVerifyGetKey,
+} from "jose";
 import { users, type AuthenticatedUser } from "@soulseer/shared";
 import type { AppBindings, AuthIdentity } from "../types";
 import { createDatabase } from "./db";
@@ -22,12 +26,33 @@ function bearerToken(authorization: string | undefined): string {
   return token;
 }
 
-async function verifyIdentity(token: string, env: Env): Promise<AuthIdentity> {
-  const jwks = createRemoteJWKSet(new URL(env.NEON_AUTH_JWKS_URL));
+export const NEON_AUTH_ALGORITHMS = ["EdDSA", "RS256", "ES256"];
+
+function requiredEnvUrl(value: string | undefined, name: string): URL {
+  try {
+    return new URL(String(value));
+  } catch {
+    throw new AppError(
+      500,
+      "AUTH_CONFIG_ERROR",
+      `Server misconfiguration: ${name} is not set to a valid URL.`,
+    );
+  }
+}
+
+export function neonAuthIssuer(authUrl: string): string {
+  return requiredEnvUrl(authUrl, "NEON_AUTH_ISSUER").origin;
+}
+
+export async function verifyIdentityToken(
+  token: string,
+  issuer: string,
+  jwks: JWTVerifyGetKey,
+): Promise<AuthIdentity> {
   try {
     const { payload } = await jwtVerify(token, jwks, {
-      issuer: env.NEON_AUTH_ISSUER,
-      algorithms: ["RS256", "ES256"],
+      issuer,
+      algorithms: NEON_AUTH_ALGORITHMS,
     });
     const email = typeof payload.email === "string" ? payload.email : null;
     if (!payload.sub || !email) {
@@ -37,10 +62,18 @@ async function verifyIdentity(token: string, env: Env): Promise<AuthIdentity> {
         "Your session is missing required identity claims.",
       );
     }
+    if (payload.emailVerified !== true) {
+      throw new AppError(
+        403,
+        "EMAIL_NOT_VERIFIED",
+        "Verify your email address to continue.",
+      );
+    }
     return {
       subject: payload.sub,
       email,
       name: typeof payload.name === "string" ? payload.name : null,
+      emailVerified: true,
     };
   } catch (error) {
     if (error instanceof AppError) throw error;
@@ -50,6 +83,14 @@ async function verifyIdentity(token: string, env: Env): Promise<AuthIdentity> {
       "Your session is invalid or expired.",
     );
   }
+}
+
+async function verifyIdentity(token: string, env: Env): Promise<AuthIdentity> {
+  return verifyIdentityToken(
+    token,
+    neonAuthIssuer(env.NEON_AUTH_ISSUER),
+    createRemoteJWKSet(requiredEnvUrl(env.NEON_AUTH_JWKS_URL, "NEON_AUTH_JWKS_URL")),
+  );
 }
 
 export const requireIdentity: MiddlewareHandler<AppBindings> = async (

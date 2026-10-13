@@ -1,7 +1,10 @@
 import { z } from "zod";
 import {
   COMMUNITY_CATEGORIES,
+  MAX_DIRECT_MESSAGE_LENGTH,
+  MAX_PAID_REPLY_CENTS,
   MAX_PROFILE_IMAGE_BYTES,
+  MIN_PAID_REPLY_CENTS,
   MINIMUM_TOP_UP_CENTS,
   READING_TYPES,
   USER_ROLES,
@@ -28,18 +31,62 @@ export const readerPricingSchema = z.object({
 });
 
 export const readerProfileUpdateSchema = z.object({
-  bio: trimmedText(1, 4_000).optional(),
+  username: trimmedText(3, 40).regex(/^[a-zA-Z0-9_.-]+$/).optional(),
+  // Readers may start with an empty bio and fill it in later.
+  bio: z.string().trim().max(4_000).optional(),
   specialties: z.array(trimmedText(1, 60)).max(20).optional(),
 });
 
 export const readerStatusSchema = z.object({ isOnline: z.boolean() });
 
+export const readerNotificationSettingsSchema = z
+  .object({
+    phoneNumber: z
+      .string()
+      .trim()
+      .regex(
+        /^\+[1-9]\d{7,14}$/,
+        "Use international format, such as +15551234567.",
+      )
+      .nullable(),
+    smsNotificationsEnabled: z.boolean(),
+  })
+  .refine(
+    (value) => !value.smsNotificationsEnabled || Boolean(value.phoneNumber),
+    {
+      message: "Add a mobile number before enabling text notifications.",
+      path: ["phoneNumber"],
+    },
+  );
+
+export const startConversationSchema = z.object({
+  readerId: uuidSchema,
+  body: trimmedText(1, MAX_DIRECT_MESSAGE_LENGTH),
+});
+
+export const sendDirectMessageSchema = z.discriminatedUnion("paid", [
+  z.object({
+    body: trimmedText(1, MAX_DIRECT_MESSAGE_LENGTH),
+    paid: z.literal(false),
+  }),
+  z.object({
+    body: trimmedText(1, MAX_DIRECT_MESSAGE_LENGTH),
+    paid: z.literal(true),
+    priceCents: z
+      .number()
+      .int()
+      .min(MIN_PAID_REPLY_CENTS)
+      .max(MAX_PAID_REPLY_CENTS),
+  }),
+]);
+
 export const createReaderSchema = z.object({
   email: z.string().trim().email().max(254),
   username: trimmedText(3, 40).regex(/^[a-zA-Z0-9_.-]+$/),
   fullName: trimmedText(2, 100),
-  bio: trimmedText(1, 4_000),
-  specialties: z.array(trimmedText(1, 60)).min(1).max(20),
+  // Readers can fill these in themselves after accepting the invitation.
+  bio: z.string().trim().max(4_000).default(""),
+  specialties: z.array(trimmedText(1, 60)).max(20).default([]),
   pricing: readerPricingSchema,
   verified: z.boolean().default(false),
 });
@@ -132,7 +179,7 @@ export const realtimeKitEventSchema = z.object({
   participant: z
     .object({
       peerId: z.string().min(1),
-      customParticipantId: uuidSchema,
+      customParticipantId: z.string().min(1).optional(),
       joinedAt: z.string().datetime().optional(),
       leftAt: z.string().datetime().optional(),
     })

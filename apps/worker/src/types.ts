@@ -4,6 +4,7 @@ export type AuthIdentity = {
   subject: string;
   email: string;
   name: string | null;
+  emailVerified: boolean;
 };
 
 export type AppVariables = {

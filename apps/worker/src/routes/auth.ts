@@ -8,6 +8,7 @@ import {
   readerProfiles,
   readingSessions,
   reviews,
+  users,
   walletLedgerEntries,
   wallets,
 } from "@soulseer/shared";
@@ -22,9 +23,26 @@ export const authRoutes = new Hono<AppBindings>();
 authRoutes.post("/bootstrap", requireIdentity, async (context) => {
   const input = bootstrapProfileSchema.parse(await context.req.json());
   const identity = context.get("identity");
-  const { sql } = createDatabase(context.env.DATABASE_URL);
+  const { db, sql } = createDatabase(context.env.DATABASE_URL);
 
   try {
+    // Admin-provisioned Readers already have an app account. After verifying
+    // their email, let them choose a username without attempting to create a
+    // second client account or changing their Reader role.
+    if (!input.readerInviteToken) {
+      const [existing] = await db
+        .update(users)
+        .set({
+          email: identity.email.toLowerCase(),
+          username: input.username,
+          fullName: input.fullName,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.neonAuthUserId, identity.subject))
+        .returning({ id: users.id });
+      if (existing) return context.json({ id: existing.id }, 200);
+    }
+
     const response = input.readerInviteToken
       ? await sql`
           SELECT public.accept_reader_invitation(
