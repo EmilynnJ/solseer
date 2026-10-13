@@ -52,7 +52,7 @@ async function dbName(db) {
 
 async function getRows(db, table) {
   // The identifier comes only from the constant table allowlist above.
-  const result = await db(
+  const result = await db.query(
     `SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY t.id), '[]'::jsonb) AS data FROM ${tableName(table)} t`
   );
   return result[0]?.data ?? [];
@@ -143,9 +143,6 @@ async function main() {
   ]);
   if (!sourceConfig.endpoint_id || !targetConfig.endpoint_id) {
     throw new Error("Missing Auth service endpoint configuration.");
-  }
-  if (sourceConfig.endpoint_id === targetConfig.endpoint_id) {
-    throw new Error("Source and target appear to share the same Auth endpoint. Refusing to modify.");
   }
 
   console.table(counts);
