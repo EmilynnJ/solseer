@@ -32,6 +32,12 @@ if (!sourceUrl || !targetUrl) {
 
 const source = neon(sourceUrl);
 const target = neon(targetUrl);
+// Both database URLs must belong to the same Neon compute/branch.
+// Accept pooled and direct hostname variants of the same endpoint.
+const endpointHost = (uri) => new URL(uri).hostname.replace("-pooler.", ".");
+if (endpointHost(sourceUrl) !== endpointHost(targetUrl)) {
+  throw new Error("Source and target URLs point to different Neon compute endpoints. Refusing cross-branch migration.");
+}
 const order = [
   "user",
   "organization",
@@ -55,7 +61,8 @@ async function getRows(db, table) {
   const result = await db.query(
     `SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY t.id), '[]'::jsonb) AS data FROM ${tableName(table)} t`
   );
-  return result[0]?.data ?? [];
+  const value = result[0]?.data ?? [];
+  return typeof value === "string" ? JSON.parse(value) : value;
 }
 
 async function getConfig(db) {
