@@ -26,7 +26,7 @@ describe("JWT authentication at the API boundary", () => {
   it("sends the JWT to the Worker and never exposes the opaque session token", async () => {
     auth.token.mockResolvedValue({ data: { token: "signed.jwt.token" }, error: null });
     await api("/auth/me");
-    const [, init] = request.mock.calls[0];
+    const [, init] = request.mock.calls[0]!;
     expect(new Headers(init.headers).get("Authorization")).toBe("Bearer signed.jwt.token");
     expect(auth.getSession).not.toHaveBeenCalled();
   });
@@ -40,7 +40,7 @@ describe("JWT authentication at the API boundary", () => {
   it("does not invent a bearer token when there is no session", async () => {
     auth.token.mockResolvedValue({ data: null, error: null });
     await api("/auth/me");
-    const [, init] = request.mock.calls[0];
+    const [, init] = request.mock.calls[0]!;
     expect(new Headers(init.headers).has("Authorization")).toBe(false);
   });
 });
