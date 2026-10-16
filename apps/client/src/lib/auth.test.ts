@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const authMocks = vi.hoisted(() => ({ token: vi.fn() }));
+const authMocks = vi.hoisted(() => ({ token: vi.fn(), clientOptions: null as unknown }));
 
 vi.mock("@neondatabase/neon-js/auth", () => ({
-  createAuthClient: () => ({
-    token: authMocks.token,
-    useSession: vi.fn(),
-  }),
+  createAuthClient: (_authUrl: string, clientOptions: unknown) => {
+    authMocks.clientOptions = clientOptions;
+    return { token: authMocks.token, useSession: vi.fn() };
+  },
 }));
 
 vi.mock("@neondatabase/neon-js/auth/react/adapters", () => ({
@@ -14,6 +14,14 @@ vi.mock("@neondatabase/neon-js/auth/react/adapters", () => ({
 }));
 
 import { getAccessToken } from "./auth";
+
+describe("Neon Auth client configuration", () => {
+  it("includes session cookies on cross-origin JWT requests", () => {
+    expect(authMocks.clientOptions).toMatchObject({
+      fetchOptions: { credentials: "include" },
+    });
+  });
+});
 
 describe("Neon Auth access tokens", () => {
   beforeEach(() => {
