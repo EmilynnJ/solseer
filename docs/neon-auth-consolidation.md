@@ -70,3 +70,18 @@ The old `neondb.neon_auth` data remains untouched after disabling Auth. If the n
 ## Known limitation
 
 Neon currently offers no verified one-click cross-database relocation for Managed Better Auth. The API provisions it in the desired database but does not itself migrate credential records. A migration script must transfer sensitive records over an authorized local connection. Do not move password hashes, OAuth tokens or private signing keys through a chat message.
+
+## Rehearsal validation on October 16, 2026
+
+- The live rehearsal had already received six users, six account rows, six sessions, and one signing-key row before this run. The historical handoff's partial-copy counts were stale.
+- Corrected the frontend SDK configuration: credentialed fetch options belong inside `BetterAuthReactAdapter(...)`. Top-level `fetchOptions` caused the Render preview build to fail with TS2353.
+- Migration preflight now checks matching column types/nullability. Application of records locks Auth tables, stages typed records, rejects conflicts, and verifies inserted records inside the transaction so a mismatch rolls back the transfer.
+- Target-only transient verification rows are preserved. Shared verification IDs and every identity, credential, provider association, signing key, and session must match exactly.
+- `--check` and two idempotent `--apply` runs passed on rehearsal. Source: six users, six accounts, six sessions, one signing-key row, two verification rows. Destination retains the two source verification rows and two additional rehearsal verification rows.
+- Row-content fingerprints of all 22 application tables were identical before/after, including 12 users, nine reader profiles, 12 wallets, six ledger entries, and eight reading sessions. No profile/financial records were changed.
+- Rehearsal public JWKS returned HTTP 200 with one key.
+- Frontend type-check passed. Focused client auth/invitation/reset tests: 18 passed. Worker JWT tests: three passed.
+- Isolated API: `https://soulseer-auth-rehearsal.emilynn.workers.dev`, bound only to rehearsal `soulseer_app`; no production payment, RealtimeKit, or image-storage credentials are installed there.
+- Preview frontend: `https://solseer-pr-243.onrender.com`; its Auth URL and API origin point to rehearsal.
+- **Production is unchanged. Real password and Google sign-in, correct reader/admin profiles, new-reader onboarding, and the production cutover remain gated on actual end-to-end results.**
+- Migration copies source trusted origins. Add the preview origin again using the supported Neon domain API after any migration rerun.

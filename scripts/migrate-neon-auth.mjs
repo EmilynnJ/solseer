@@ -20,14 +20,16 @@
  */
 import { neon } from "@neondatabase/serverless";
 
+class MigrationSafetyError extends Error {}
+
 const mode = process.argv[2] ?? "--check";
 if (!["--check", "--apply"].includes(mode)) {
-  throw new Error("Usage: node scripts/migrate-neon-auth.mjs [--check|--apply]");
+  throw new MigrationSafetyError("Usage: node scripts/migrate-neon-auth.mjs [--check|--apply]");
 }
 const sourceUrl = process.env.SOULSEER_AUTH_SOURCE_URL;
 const targetUrl = process.env.SOULSEER_AUTH_TARGET_URL;
 if (!sourceUrl || !targetUrl) {
-  throw new Error("Set SOULSEER_AUTH_SOURCE_URL and SOULSEER_AUTH_TARGET_URL in your local environment. Do not paste them into chat, logs, or GitHub.");
+  throw new MigrationSafetyError("Set SOULSEER_AUTH_SOURCE_URL and SOULSEER_AUTH_TARGET_URL in your local environment. Do not paste them into chat, logs, or GitHub.");
 }
 
 const source = neon(sourceUrl);
@@ -36,7 +38,7 @@ const target = neon(targetUrl);
 // Accept pooled and direct hostname variants of the same endpoint.
 const endpointHost = (uri) => new URL(uri).hostname.replace("-pooler.", ".");
 if (endpointHost(sourceUrl) !== endpointHost(targetUrl)) {
-  throw new Error("Source and target URLs point to different Neon compute endpoints. Refusing cross-branch migration.");
+  throw new MigrationSafetyError("Source and target URLs point to different Neon compute endpoints. Refusing cross-branch migration.");
 }
 const order = [
   "user",
@@ -73,7 +75,7 @@ async function getConfig(db) {
     FROM neon_auth.project_config
   `;
   if (rows.length !== 1) {
-    throw new Error("Expected exactly one Auth configuration row in each database.");
+    throw new MigrationSafetyError("Expected exactly one Auth configuration row in each database.");
   }
   return rows[0];
 }
@@ -113,7 +115,7 @@ function insertQuery(table, records) {
     case "verification":
       return target`INSERT INTO neon_auth.verification SELECT * FROM jsonb_populate_recordset(NULL::neon_auth.verification, ${payload}::jsonb) ON CONFLICT DO NOTHING`;
     default:
-      throw new Error("Unexpected Auth table.");
+      throw new MigrationSafetyError("Unexpected Auth table.");
   }
 }
 
@@ -123,7 +125,17 @@ async function main() {
     dbName(target),
   ]);
   if (sourceName !== "neondb" || targetName !== "soulseer_app") {
-    throw new Error("Wrong database target. Expected neondb -> soulseer_app. Nothing changed.");
+    throw new MigrationSafetyError("Wrong database target. Expected neondb -> soulseer_app. Nothing changed.");
+  }
+
+  const schemas = await Promise.all([source, target].map(db => db`
+    SELECT table_name, column_name, udt_name, is_nullable
+    FROM information_schema.columns
+    WHERE table_schema = 'neon_auth'
+    ORDER BY table_name, ordinal_position
+  `));
+  if (!sameRecord(schemas[0], schemas[1])) {
+    throw new MigrationSafetyError("Auth schemas differ. Refusing type conversion or missing-column data loss.");
   }
 
   const expected = new Map();
@@ -134,22 +146,25 @@ async function main() {
     const byId = new Map(sourceRows.map((row) => [row.id, row]));
     for (const current of targetRows) {
       const original = byId.get(current.id);
-      if (!original || !sameRecord(original, current)) {
-        throw new Error(`The target has an unexpected/conflicting ${table} record. Nothing changed; investigate before continuing.`);
+      // The managed service may create fresh OAuth/OTP verification records.
+      // Preserve these target-only transient rows; shared IDs must still match.
+      if ((!original && table !== "verification") ||
+          (original && !sameRecord(original, current))) {
+        throw new MigrationSafetyError(`The target has an unexpected/conflicting ${table} record. Nothing changed; investigate before continuing.`);
       }
     }
     expected.set(table, sourceRows);
     counts.push({ table, source: sourceRows.length, target: targetRows.length });
   }
   if ((expected.get("user")?.length ?? 0) === 0) {
-    throw new Error("The source has no Auth identities. Refusing an empty migration.");
+    throw new MigrationSafetyError("The source has no Auth identities. Refusing an empty migration.");
   }
   const [sourceConfig, targetConfig] = await Promise.all([
     getConfig(source),
     getConfig(target),
   ]);
   if (!sourceConfig.endpoint_id || !targetConfig.endpoint_id) {
-    throw new Error("Missing Auth service endpoint configuration.");
+    throw new MigrationSafetyError("Missing Auth service endpoint configuration.");
   }
 
   console.table(counts);
@@ -161,12 +176,36 @@ async function main() {
   }
 
   // Insert dependent tables in FK order in a single transaction.
-  const queries = [];
+  const queries = [target.query(
+    "LOCK TABLE " + order.map(tableName).join(", ") + ", neon_auth.project_config IN SHARE ROW EXCLUSIVE MODE"
+  )];
+  queries.push(target`
+    SELECT 1 / CASE WHEN count(*) = 1 THEN 1 ELSE 0 END AS endpoint_guard
+    FROM neon_auth.project_config
+    WHERE id = ${targetConfig.id}::uuid AND endpoint_id = ${targetConfig.endpoint_id}
+  `);
   for (const table of order) {
     const records = expected.get(table);
+    const stage = "soulseer_auth_" + table;
+    queries.push(target.query(
+      'CREATE TEMP TABLE "' + stage + '" ON COMMIT DROP AS SELECT * FROM ' + tableName(table) + ' WHERE false'
+    ));
+    queries.push(target.query(
+      'INSERT INTO "' + stage + '" SELECT * FROM jsonb_populate_recordset(NULL::' + tableName(table) + ', $1::jsonb)',
+      [JSON.stringify(records)]
+    ));
+    // Recheck under table locks. A failed assertion rolls back every write.
+    queries.push(target.query(
+      'DO $$ BEGIN IF EXISTS (SELECT 1 FROM ' + tableName(table) + ' t LEFT JOIN "' + stage + '" s ON s.id=t.id WHERE ' +
+      (table === "verification" ? "s.id IS NOT NULL AND " : "") +
+      "to_jsonb(t) IS DISTINCT FROM to_jsonb(s)) THEN RAISE EXCEPTION USING ERRCODE='P0001', MESSAGE='Auth migration conflict'; END IF; END $$"
+    ));
     if (records.length) queries.push(insertQuery(table, records));
+    queries.push(target.query(
+      'DO $$ BEGIN IF EXISTS (SELECT 1 FROM "' + stage + '" s LEFT JOIN ' + tableName(table) + ' t ON t.id=s.id WHERE ' +
+      "to_jsonb(t) IS DISTINCT FROM to_jsonb(s)) THEN RAISE EXCEPTION USING ERRCODE='P0001', MESSAGE='Auth migration verification failed'; END IF; END $$"
+    ));
   }
-
   // Preserve the new service's ID and endpoint_id. Carry over the actual OAuth,
   // email, trusted-origin and plugin configuration without logging any secrets.
   queries.push(target`
@@ -187,9 +226,10 @@ async function main() {
   for (const table of order) {
     const actual = await getRows(target, table);
     const original = expected.get(table);
-    if (actual.length !== original.length ||
-        actual.some((row, i) => !sameRecord(row, original[i]))) {
-      throw new Error(`Verification failed for ${table}. Do not cut over production.`);
+    const byId = new Map(actual.map(row => [row.id, row]));
+    if ((table !== "verification" && actual.length !== original.length) ||
+        original.some(row => !sameRecord(row, byId.get(row.id)))) {
+      throw new MigrationSafetyError(`Verification failed for ${table}. Do not cut over production.`);
     }
   }
 
@@ -198,11 +238,11 @@ async function main() {
       "email_provider", "email_and_password", "allow_localhost",
       "plugin_configs", "webhook_config"]) {
     if (!sameRecord(config[key], sourceConfig[key])) {
-      throw new Error(`Config verification failed for ${key}. Do not cut over production.`);
+      throw new MigrationSafetyError(`Config verification failed for ${key}. Do not cut over production.`);
     }
   }
   if (config.endpoint_id !== targetConfig.endpoint_id) {
-    throw new Error("Target Auth endpoint was unexpectedly altered. Do not cut over.");
+    throw new MigrationSafetyError("Target Auth endpoint was unexpectedly altered. Do not cut over.");
   }
 
   const app = await target`
@@ -221,6 +261,7 @@ main().catch((error) => {
   // Error messages from database drivers may contain connection-string details.
   // Do not log raw errors, query parameters, or connection strings.
   console.error("Migration stopped or failed. Review database/schema permissions and table constraints.");
+  if (error instanceof MigrationSafetyError) console.error(error.message);
   console.error(error?.code ? `Postgres code: ${error.code}` : "No SQL details printed for credential safety.");
   process.exitCode = 1;
 });
