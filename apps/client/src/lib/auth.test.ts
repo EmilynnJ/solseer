@@ -1,51 +1,61 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const authMocks = vi.hoisted(() => ({ token: vi.fn(), clientOptions: null as unknown }));
-
-vi.mock("@neondatabase/neon-js/auth", () => ({
-  createAuthClient: (_authUrl: string, clientOptions: unknown) => {
-    authMocks.clientOptions = clientOptions;
-    return { token: authMocks.token, useSession: vi.fn() };
-  },
+const sdkMocks = vi.hoisted(() => ({
+  adapterOptions: null as unknown,
 }));
-
+vi.mock("@neondatabase/neon-js/auth", () => ({
+  createAuthClient: () => ({ useSession: vi.fn() }),
+}));
 vi.mock("@neondatabase/neon-js/auth/react/adapters", () => ({
-  BetterAuthReactAdapter: () => vi.fn(),
+  BetterAuthReactAdapter: (options: unknown) => {
+    sdkMocks.adapterOptions = options;
+    return vi.fn();
+  },
 }));
 
 import { getAccessToken } from "./auth";
 
-describe("Neon Auth client configuration", () => {
-  it("includes session cookies on cross-origin JWT requests", () => {
-    expect(authMocks.clientOptions).toMatchObject({
+describe("Neon Auth JWT for the Cloudflare API", () => {
+  const request = vi.fn();
+
+  beforeEach(() => {
+    request.mockReset();
+    vi.stubGlobal("fetch", request);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("configures credentials on the SDK React adapter", () => {
+    expect(sdkMocks.adapterOptions).toMatchObject({
       fetchOptions: { credentials: "include" },
     });
   });
-});
 
-describe("Neon Auth access tokens", () => {
-  beforeEach(() => {
-    authMocks.token.mockReset();
+  it("retrieves a signed JWT using the session cookie without SDK token caching", async () => {
+    request.mockResolvedValue(
+      new Response(JSON.stringify({ token: "header.payload.signature" }), { status: 200 }),
+    );
+    await expect(getAccessToken()).resolves.toBe("header.payload.signature");
+    expect(request).toHaveBeenCalledWith(
+      expect.stringMatching(/\/token$/),
+      expect.objectContaining({
+        method: "GET",
+        credentials: "include",
+      }),
+    );
   });
 
-  it("retrieves the signed JWT from Neon's authenticated session", async () => {
-    authMocks.token.mockResolvedValue({
-      data: { token: "signed.jwt.value" },
-      error: null,
-    });
-
-    await expect(getAccessToken()).resolves.toBe("signed.jwt.value");
-  });
-
-  it("returns null when Neon Auth has no authenticated session", async () => {
-    authMocks.token.mockResolvedValue({ data: null, error: null });
-
+  it("returns null when the Auth session has expired", async () => {
+    request.mockResolvedValue(new Response(null, { status: 401 }));
     await expect(getAccessToken()).resolves.toBeNull();
   });
 
-  it("surfaces unexpected Neon Auth SDK failures", async () => {
-    authMocks.token.mockRejectedValue(new Error("Auth unavailable."));
+  it("rejects opaque session identifiers instead of forwarding them to the Worker", async () => {
+    request.mockResolvedValue(new Response(JSON.stringify({ token: "opaque-session" })));
+    await expect(getAccessToken()).resolves.toBeNull();
+  });
 
-    await expect(getAccessToken()).rejects.toThrow("Auth unavailable.");
+  it("surfaces unexpected Neon Auth failures", async () => {
+    request.mockResolvedValue(new Response(null, { status: 500 }));
+    await expect(getAccessToken()).rejects.toThrow("Could not refresh your sign-in session.");
   });
 });
