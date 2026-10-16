@@ -6,10 +6,10 @@ const authUrl = (
 ).replace(/\/$/, "");
 
 export const authClient = createAuthClient(authUrl, {
-  adapter: BetterAuthReactAdapter({
-    // Browser session cookies are issued by the separate Neon Auth origin.
-    fetchOptions: { credentials: "include" },
-  }),
+  // Neon Auth is on a different origin. Send the session cookie for JWT requests.
+  // fetchOptions belong to the client, NOT to the React adapter.
+  fetchOptions: { credentials: "include" },
+  adapter: BetterAuthReactAdapter(),
 });
 
 export async function getAccessToken(): Promise<string | null> {
