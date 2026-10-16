@@ -37,10 +37,9 @@ describe("JWT authentication at the API boundary", () => {
     expect(request).not.toHaveBeenCalled();
   });
 
-  it("does not invent a bearer token when there is no session", async () => {
+  it("never sends a protected API request without a signed JWT", async () => {
     auth.token.mockResolvedValue({ data: null, error: null });
-    await api("/auth/me");
-    const [, init] = request.mock.calls[0]!;
-    expect(new Headers(init.headers).has("Authorization")).toBe(false);
+    await expect(api("/auth/me")).rejects.toThrow("Please sign in again.");
+    expect(request).not.toHaveBeenCalled();
   });
 });
