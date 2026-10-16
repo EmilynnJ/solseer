@@ -33,7 +33,14 @@ export async function api<T>(
     headers.set("Content-Type", "application/json");
   if (authenticated) {
     const token = await getAccessToken();
-    if (token) headers.set("Authorization", `Bearer ${token}`);
+    if (!token) {
+      throw new ApiError(
+        "We couldn't confirm your sign-in session. Please sign in again.",
+        401,
+        "AUTH_REQUIRED",
+      );
+    }
+    headers.set("Authorization", `Bearer ${token}`);
   }
   const response = await fetch(`${API_ORIGIN}/api${path}`, {
     ...init,
