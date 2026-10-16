@@ -23,6 +23,8 @@ import { neon } from "@neondatabase/serverless";
 class MigrationSafetyError extends Error {}
 
 const mode = process.argv[2] ?? "--check";
+const renewSigningKeys = process.argv.includes("--renew-signing-keys");
+if (renewSigningKeys && mode !== "--apply") throw new MigrationSafetyError("Signing-key renewal requires --apply.");
 if (!["--check", "--apply"].includes(mode)) {
   throw new MigrationSafetyError("Usage: node scripts/migrate-neon-auth.mjs [--check|--apply]");
 }
@@ -221,6 +223,16 @@ async function main() {
     WHERE id = ${targetConfig.id}::uuid
   `);
 
+
+  // A re-provisioned managed instance has a different encryption secret.
+  // Retain imported key material, but force it to mint a usable current key.
+  if (renewSigningKeys && expected.get("jwks").length) {
+    queries.push(target.query(
+      'UPDATE neon_auth.jwks SET "expiresAt" = LEAST(COALESCE("expiresAt", now()), now()) WHERE id = ANY($1::uuid[])',
+      [expected.get("jwks").map(row => row.id)]
+    ));
+  }
+
   await target.transaction(queries);
 
   for (const table of order) {
@@ -228,7 +240,14 @@ async function main() {
     const original = expected.get(table);
     const byId = new Map(actual.map(row => [row.id, row]));
     if ((table !== "verification" && actual.length !== original.length) ||
-        original.some(row => !sameRecord(row, byId.get(row.id)))) {
+        original.some(row => {
+          const actual = byId.get(row.id);
+          if (table === "jwks" && renewSigningKeys && actual) {
+            return new Date(actual.expiresAt).getTime() > Date.now() ||
+              !sameRecord(row, { ...actual, expiresAt: row.expiresAt });
+          }
+          return !sameRecord(row, actual);
+        })) {
       throw new MigrationSafetyError(`Verification failed for ${table}. Do not cut over production.`);
     }
   }
@@ -251,7 +270,8 @@ async function main() {
     FROM public.users u
     LEFT JOIN neon_auth."user" a ON a.id::text = u.neon_auth_user_id
   `;
-  console.log("AUTH DATA COPY VERIFIED. All Auth table records and selected config values match.");
+  console.log("AUTH DATA COPY VERIFIED. All source Auth records and selected config values transferred.");
+  if (renewSigningKeys) console.log("Imported signing-key material is retained with expired signing use; the managed service will mint its current key on the next token request.");
   console.log(`Existing SoulSeer profiles: ${app[0].profiles}; matching Auth identities: ${app[0].linked}.`);
   console.log("NEXT: Confirm managed Auth endpoint, Google OAuth callback, and sign-in on the test branch.");
   console.log("Existing browser sessions may need a fresh login on the new Auth endpoint.");

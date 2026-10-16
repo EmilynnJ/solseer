@@ -87,3 +87,15 @@ Neon currently offers no verified one-click cross-database relocation for Manage
 - Migration copies source trusted origins. Add the preview origin again using the supported Neon domain API after any migration rerun.
 
 Full frontend regression suite: 56 tests passed against this checkout's shared package. Updated existing token tests to use the JWT endpoint.
+
+### Managed signing-key renewal
+
+A live synthetic password sign-in succeeded, but `/token` and `/get-session` returned HTTP 500 with the copied encrypted private key. Marking the imported key expired (retaining its ID, public key, and encrypted private key) caused Managed Auth to create a new key. `/token` and `/get-session` then returned HTTP 200; the JWT signature and subject validated against the rehearsal JWKS, and the Worker correctly returned `EMAIL_NOT_VERIFIED` for the synthetic unverified identity. This behavior is consistent with private-key encryption under the managed instance secret: https://better-auth.com/docs/plugins/jwt.
+
+For a newly provisioned production instance run `--apply --renew-signing-keys`. This deliberately expires imported signing use while preserving original key material and all source records. Existing browser sessions require fresh sign-in; passwords, provider associations, and Auth identity IDs remain unchanged.
+
+A fresh production recovery branch `br-patient-salad-ajtuo5o1` was created October 16 at 18:13:37 UTC and verified to hold six Auth users, six accounts, seven sessions, 12 app profiles, nine readers, and 12 wallets.
+
+The reported reader account has a correctly linked, unverified password Auth identity and no Google association in the source. Migration preserves that state. Approval of the reader profile is separate from verification of the Auth email; no approval state is changed.
+
+Fresh end-to-end rehearsal `br-square-wind-ajuo43e8`: provisioned Auth in `soulseer_app` with empty Auth tables, transferred six identities/six accounts/seven sessions/two verification records plus original key material using `--apply --renew-signing-keys`; all 22 business-table fingerprints unchanged. A synthetic password account signed up and received a JWT whose signature and subject verified using the new instance JWKS (HTTP 200). The original preserved checkpoint remains intact.
