@@ -53,8 +53,8 @@ FRONTEND_ORIGIN = "https://soul-seer.net"
 FRONTEND_ORIGINS = "https://soul-seer.net,https://www.soul-seer.net,https://solseer-client.vercel.app"
 REALTIMEKIT_WEBHOOK_PUBLIC_KEY_URL = "https://api.realtime.cloudflare.com/.well-known/webhooks.json"
 CLOUDFLARE_ACCOUNT_ID = "36814ac88bdb3e11aea039b9757b5cbd"
-NEON_AUTH_ISSUER = "https://ep-still-mud-aj5bg4yw.neonauth.c-3.us-east-2.aws.neon.tech/neondb/auth"
-NEON_AUTH_JWKS_URL = "https://ep-still-mud-aj5bg4yw.neonauth.c-3.us-east-2.aws.neon.tech/neondb/auth/.well-known/jwks.json"
+NEON_AUTH_ISSUER = "https://ep-still-mud-aj5bg4yw.neonauth.c-3.us-east-2.aws.neon.tech/soulseer_app/auth"
+NEON_AUTH_JWKS_URL = "https://ep-still-mud-aj5bg4yw.neonauth.c-3.us-east-2.aws.neon.tech/soulseer_app/auth/.well-known/jwks.json"
 
 [env.production.secrets]
 required = ["DATABASE_URL", "UPLOAD_SIGNING_SECRET"]
