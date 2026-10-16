@@ -85,3 +85,5 @@ Neon currently offers no verified one-click cross-database relocation for Manage
 - Preview frontend: `https://solseer-pr-243.onrender.com`; its Auth URL and API origin point to rehearsal.
 - **Production is unchanged. Real password and Google sign-in, correct reader/admin profiles, new-reader onboarding, and the production cutover remain gated on actual end-to-end results.**
 - Migration copies source trusted origins. Add the preview origin again using the supported Neon domain API after any migration rerun.
+
+Full frontend regression suite: 56 tests passed against this checkout's shared package. Updated existing token tests to use the JWT endpoint.
