@@ -21,14 +21,14 @@
     "@soulseer/shared": "*",
     "@stripe/react-stripe-js": "*",
     "@stripe/stripe-js": "*",
-    "dompurify": "^3.4.16",
+    "dompurify": "^3.4.17",
     "html-react-parser": "^6.1.7",
     "lucide-react": "*",
     "posthog-js": "^1.415.1",
     "react": "*",
     "react-dom": "*",
     "react-router-dom": "7.18.2",
-    "zod": "*"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@eslint/js": "*",
