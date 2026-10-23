@@ -47,3 +47,18 @@ it("keeps the form available and displays account conflicts without a success li
   expect(screen.getByLabelText("Email address")).toHaveValue("reader@example.com");
   expect(screen.queryByLabelText("Reader invitation link")).not.toBeInTheDocument();
 });
+
+it("rejects a spaced username before requesting an invitation and explains how to correct it", () => {
+  open();
+  const input = screen.getByLabelText("Reader username") as HTMLInputElement;
+  fireEvent.change(input, { target: { value: "Pre Ramana" } });
+  // HTML patterns use the v flag in current browsers; an unescaped hyphen
+  // makes this pattern invalid and silently disables native validation.
+  const pattern = new RegExp(`^(?:${input.pattern})$`, "v");
+  expect(pattern.test("Pre Ramana")).toBe(false);
+  expect(pattern.test("Pre_Ramana")).toBe(true);
+  expect(pattern.test("Pre-Ramana")).toBe(true);
+  fireEvent.submit(input.closest("form")!);
+  expect(screen.getByText(/Reader username must be 3–40 characters with no spaces/)).toBeInTheDocument();
+  expect(mocks.api).not.toHaveBeenCalled();
+});

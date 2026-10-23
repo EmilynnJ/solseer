@@ -18,7 +18,7 @@ import {
   Star,
   Users,
 } from "lucide-react";
-import { readerNotificationSettingsSchema, TOP_UP_PRESETS_CENTS } from "@soulseer/shared";
+import { createReaderSchema, readerNotificationSettingsSchema, TOP_UP_PRESETS_CENTS } from "@soulseer/shared";
 import type { LedgerEntry, Reading } from "../types";
 import { ApiError, api, dateTime, duration, money } from "../lib/api";
 import { useApiData } from "../hooks/use-api";
@@ -814,6 +814,10 @@ function AdminDashboard() {
   async function inviteReader(e: FormEvent) {
     e.preventDefault();
     if (inviting) return;
+    if (!createReaderSchema.shape.username.safeParse(invite.username).success) {
+      setNotice("Reader username must be 3–40 characters with no spaces. Use letters, numbers, dots, underscores, or hyphens—for example, Pre_Ramana.");
+      return;
+    }
     setInviting(true);
     setNotice(null);
     setHandoff(null);
@@ -1023,12 +1027,17 @@ function AdminDashboard() {
                 required
                 minLength={3}
                 maxLength={40}
-                pattern="[A-Za-z0-9_.-]+"
+                pattern={"[A-Za-z0-9_.\\-]+"}
+                title="3–40 characters: letters, numbers, dots, underscores, or hyphens. No spaces."
+                aria-describedby="reader-username-help"
                 autoComplete="off"
                 value={invite.username}
                 onChange={(e) => setInvite({ ...invite, username: e.target.value })}
               />
             </label>
+            <p id="reader-username-help" className="wide">
+              No spaces in usernames. For example, use Pre_Ramana. The full name above can include spaces.
+            </p>
             <p className="wide">
               Share the invitation link so the reader can choose a password and verify their email.
               Initial rates are $5/min for chat, $7/min for voice, and $10/min for video; you can edit these after signup.
