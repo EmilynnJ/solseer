@@ -807,72 +807,35 @@ function AdminDashboard() {
   const [invite, setInvite] = useState({
     email: "",
     fullName: "",
-    temporaryPassword: "",
+    username: "",
   });
   const [handoff, setHandoff] = useState<string | null>(null);
+  const [inviting, setInviting] = useState(false);
   async function inviteReader(e: FormEvent) {
     e.preventDefault();
-    let authUserId: string | null = null;
-    let appProvisioned = false;
+    if (inviting) return;
+    setInviting(true);
+    setNotice(null);
+    setHandoff(null);
     try {
-      const authResult = await authClient.admin.createUser({
-        email: invite.email.trim(),
-        password: invite.temporaryPassword,
-        name: invite.fullName.trim(),
-        role: "user",
-      });
-      if (authResult.error) throw new Error(authResult.error.message);
-      authUserId = authResult.data.user.id;
-
-      await api<{ userId: string }>("/admin/readers/provision", {
+      const result = await api<{ inviteUrl: string }>("/admin/readers", {
         method: "POST",
         body: JSON.stringify({
-          neonAuthUserId: authUserId,
           email: invite.email.trim(),
           fullName: invite.fullName.trim(),
+          username: invite.username.trim(),
+          pricing: { chat: 500, voice: 700, video: 1000 },
+          verified: false,
         }),
       });
-      appProvisioned = true;
-      const handoffText = [
-        "SoulSeer reader account",
-        `Sign in: ${window.location.origin}/login`,
-        `Email: ${invite.email.trim()}`,
-        `Temporary password: ${invite.temporaryPassword}`,
-        "After signing in, choose your public username and complete your reader profile. Please change this temporary password after your first sign-in.",
-      ].join("\n");
-      try {
-        await navigator.clipboard.writeText(handoffText);
-        setNotice(`Reader account created. Handoff details copied. The reader can choose their username and complete their profile after signing in.`);
-      } catch {
-        setHandoff(handoffText);
-        setNotice("Reader account created. Copy the handoff details shown below and give them to the reader securely.");
-      }
-      setInvite({ email: "", fullName: "", temporaryPassword: "" });
-      await Promise.all([users.refresh(), readerProfiles.refresh()]).catch(() => {
-        setNotice("Reader account created. Refresh the dashboard if the Readers list does not update.");
-      });
+      // Keep the link visible even if clipboard access fails on mobile.
+      setHandoff(result.inviteUrl);
+      setInvite({ email: "", fullName: "", username: "" });
+      setNotice("Reader invitation created. Share the link with the reader; it expires in 7 days.");
     } catch (cause) {
-      let rollbackFailed = false;
-      // Compensate only for a confirmed HTTP rejection. A network failure can
-      // happen after the Worker committed, so deleting Auth then could orphan
-      // the app account.
-      if (authUserId && !appProvisioned && cause instanceof ApiError) {
-        try {
-          const rollback = await authClient.admin.removeUser({ userId: authUserId });
-          rollbackFailed = Boolean(rollback.error);
-        } catch {
-          rollbackFailed = true;
-        }
-      }
-      const uncertain = authUserId && !appProvisioned && !(cause instanceof ApiError);
-      setNotice(
-        appProvisioned
-          ? `Reader account created, but a later step failed. ${inviteErrorMessage(cause)}`
-          : uncertain
-          ? `Could not confirm reader account setup. Check the Readers list before retrying; the account may already exist. ${inviteErrorMessage(cause)}`
-          : `Reader setup failed${rollbackFailed ? "; the login could not be rolled back, so check Neon Auth before retrying" : ""}: ${inviteErrorMessage(cause)}`,
-      );
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      setNotice(`Reader invitation failed: ${inviteErrorMessage(cause)}`);
+    } finally {
+      setInviting(false);
     }
   }
   async function readerAction(
@@ -1030,7 +993,7 @@ function AdminDashboard() {
         </DashboardSection>
       )}
       {tab === "readers" && (
-        <DashboardSection icon={<Check />} title="Set up a Reader account">
+        <DashboardSection icon={<Check />} title="Create a Reader invitation">
           <form className="admin-form" onSubmit={inviteReader}>
             <label>
               Full name
@@ -1055,46 +1018,44 @@ function AdminDashboard() {
               />
             </label>
             <label>
-              Temporary password
+              Reader username
               <input
                 required
-                type="password"
-                minLength={8}
-                maxLength={128}
-                autoComplete="new-password"
-                value={invite.temporaryPassword}
-                onChange={(e) =>
-                  setInvite({ ...invite, temporaryPassword: e.target.value })
-                }
+                minLength={3}
+                maxLength={40}
+                pattern="[A-Za-z0-9_.-]+"
+                autoComplete="off"
+                value={invite.username}
+                onChange={(e) => setInvite({ ...invite, username: e.target.value })}
               />
             </label>
             <p className="wide">
-              The Reader will choose a username, verify their email, and complete their profile after signing in.
+              Share the invitation link so the reader can choose a password and verify their email.
+              Initial rates are $5/min for chat, $7/min for voice, and $10/min for video; you can edit these after signup.
             </p>
-            <Button>Create Reader account</Button>
+            <Button disabled={inviting}>{inviting ? "Creating invitation…" : "Create Reader invitation"}</Button>
           </form>
           {handoff && (
             <div className="stack-form compact" role="status">
               <label>
-                Handoff details
-                <textarea readOnly rows={5} value={handoff} />
+                Reader invitation link
+                <textarea readOnly rows={3} value={handoff} />
               </label>
               <Button
                 type="button"
                 onClick={async () => {
                   try {
                     await navigator.clipboard.writeText(handoff);
-                    setHandoff(null);
-                    setNotice("Handoff details copied. Give them to the reader securely.");
+                    setNotice("Invitation link copied. Share it with the intended reader.");
                   } catch {
-                    setNotice("Clipboard access is unavailable. Select and copy the handoff text above, then hide it when finished.");
+                    setNotice("Clipboard access is unavailable. Select and copy the invitation link above.");
                   }
                 }}
               >
-                Copy and hide handoff details
+                Copy invitation link
               </Button>
               <Button type="button" onClick={() => setHandoff(null)}>
-                Hide handoff details
+                Hide invitation link
               </Button>
             </div>
           )}
@@ -1427,7 +1388,7 @@ function LedgerTable({ rows }: { rows: LedgerEntry[] }) {
 const INVITE_FIELD_LABELS: Record<string, string> = {
   email: "Email",
   fullName: "Full name",
-  temporaryPassword: "Temporary password (at least 8 characters)",
+  username: "Reader username",
 };
 
 function inviteErrorMessage(cause: unknown) {
