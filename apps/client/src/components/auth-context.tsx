@@ -9,7 +9,7 @@ import {
 } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import type { MeResponse } from "../types";
-import { api, isProfileRequiredError } from "../lib/api";
+import { ApiError, api, isProfileRequiredError } from "../lib/api";
 import { authClient } from "../lib/auth";
 import { posthog } from "../lib/posthog";
 import { Loading } from "./ui";
@@ -19,6 +19,7 @@ type AuthState = {
   sessionUser: { id: string; email: string; name: string } | null;
   loading: boolean;
   needsProfile: boolean;
+  needsVerification: boolean;
   profileError: string | null;
   refresh: () => Promise<void>;
 };
@@ -30,12 +31,14 @@ export function SoulAuthProvider({ children }: PropsWithChildren) {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [needsProfile, setNeedsProfile] = useState(false);
+  const [needsVerification, setNeedsVerification] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!session.data?.user) {
       setMe(null);
       setNeedsProfile(false);
+      setNeedsVerification(false);
       setProfileError(null);
       return;
     }
@@ -43,11 +46,13 @@ export function SoulAuthProvider({ children }: PropsWithChildren) {
     try {
       setMe(await api<MeResponse>("/auth/me"));
       setNeedsProfile(false);
+      setNeedsVerification(false);
       setProfileError(null);
     } catch (error) {
       setMe(null);
       const missing = isProfileRequiredError(error);
       setNeedsProfile(missing);
+      setNeedsVerification(error instanceof ApiError && error.code === "EMAIL_NOT_VERIFIED");
       setProfileError(
         missing
           ? null
@@ -91,12 +96,14 @@ export function SoulAuthProvider({ children }: PropsWithChildren) {
         : null,
       loading: session.isPending || profileLoading,
       needsProfile,
+      needsVerification,
       profileError,
       refresh,
     }),
     [
       me,
       needsProfile,
+      needsVerification,
       profileError,
       profileLoading,
       refresh,
@@ -133,6 +140,8 @@ export function Protected({
         replace
       />
     );
+  if (auth.needsVerification)
+    return <Navigate to={`/login?verify=1&returnTo=${encodeURIComponent(location.pathname + location.search)}`} replace />;
   if (auth.needsProfile) return <Navigate to="/login?complete=1" replace />;
   if (!auth.me)
     return (

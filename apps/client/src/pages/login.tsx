@@ -11,6 +11,23 @@ const PENDING_VERIFICATION_EMAIL = "soulseer.pendingVerificationEmail";
 // sent back to /login without the link's query string) still becomes a Reader.
 const PENDING_READER_INVITE = "soulseer.pendingReaderInvite";
 
+function storedVerificationEmail() {
+  try {
+    return sessionStorage.getItem(PENDING_VERIFICATION_EMAIL) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function storeVerificationEmail(email: string | null) {
+  try {
+    if (email) sessionStorage.setItem(PENDING_VERIFICATION_EMAIL, email);
+    else sessionStorage.removeItem(PENDING_VERIFICATION_EMAIL);
+  } catch {
+    // The code-entry form also works when browser storage is unavailable.
+  }
+}
+
 function storedReaderInvite() {
   try {
     return localStorage.getItem(PENDING_READER_INVITE) ?? "";
@@ -34,12 +51,11 @@ export function LoginPage() {
   const readerInvite = linkInvite || storedReaderInvite();
   const auth = useSoulAuth();
   const navigate = useNavigate();
-  const pendingVerificationEmail =
-    sessionStorage.getItem(PENDING_VERIFICATION_EMAIL) ?? "";
+  const pendingVerificationEmail = storedVerificationEmail();
   const [mode, setMode] = useState<
     "signin" | "signup" | "verify" | "forgot" | "profile"
   >(
-    pendingVerificationEmail
+    pendingVerificationEmail || params.get("verify") === "1" || auth.needsVerification
       ? "verify"
       : linkInvite
         ? "signup"
@@ -48,7 +64,7 @@ export function LoginPage() {
           : "signin",
   );
   const [form, setForm] = useState({
-    email: pendingVerificationEmail,
+    email: auth.sessionUser?.email || pendingVerificationEmail,
     password: "",
     name: "",
     username: "",
@@ -69,6 +85,14 @@ export function LoginPage() {
   useEffect(() => {
     if (linkInvite) storeReaderInvite(linkInvite);
   }, [linkInvite]);
+  useEffect(() => {
+    if (!auth.needsVerification) return;
+    setMode("verify");
+    const email = auth.sessionUser?.email;
+    if (email) {
+      setForm((current) => ({ ...current, email }));
+    }
+  }, [auth.needsVerification, auth.sessionUser?.email]);
   useEffect(() => {
     if (!auth.needsProfile || mode === "verify") return;
     setMode("profile");
@@ -92,14 +116,14 @@ export function LoginPage() {
         });
         if (result.error) throw new Error(result.error.message);
         if (!result.data.user.emailVerified) {
+          storeVerificationEmail(form.email);
+          setMode("verify");
           const verification = await authClient.emailOtp.sendVerificationOtp({
             email: form.email,
             type: "email-verification",
           });
           if (verification.error)
             throw new Error(verification.error.message);
-          sessionStorage.setItem(PENDING_VERIFICATION_EMAIL, form.email);
-          setMode("verify");
           setMessage({
             tone: "success",
             text: "Verify your email with the code we just sent.",
@@ -120,14 +144,14 @@ export function LoginPage() {
         });
         if (result.error) throw new Error(result.error.message);
         if (!result.data.user.emailVerified) {
+          storeVerificationEmail(form.email);
+          setMode("verify");
           const verification = await authClient.emailOtp.sendVerificationOtp({
             email: form.email,
             type: "email-verification",
           });
           if (verification.error)
             throw new Error(verification.error.message);
-          sessionStorage.setItem(PENDING_VERIFICATION_EMAIL, form.email);
-          setMode("verify");
           setMessage({
             tone: "success",
             text: "We sent a verification code to your email.",
@@ -143,7 +167,7 @@ export function LoginPage() {
         if (result.error) throw new Error(result.error.message);
         if (!result.data.user.emailVerified)
           throw new Error("Email verification did not complete.");
-        sessionStorage.removeItem(PENDING_VERIFICATION_EMAIL);
+        storeVerificationEmail(null);
         await auth.refresh();
         setMode("profile");
         setMessage({
@@ -261,7 +285,7 @@ export function LoginPage() {
           </h2>
           <p className="muted">
             {mode === "verify"
-              ? `Enter the code sent to ${form.email}.`
+              ? "Enter your email address and the verification code from your email."
               : mode === "profile"
                 ? "Choose how you’ll appear in the SoulSeer community."
                 : form.invite
@@ -320,7 +344,7 @@ export function LoginPage() {
                 />
               </label>
             )}
-            {mode !== "profile" && mode !== "verify" && (
+            {mode !== "profile" && (
               <label>
                 Email address
                 <input
@@ -401,6 +425,9 @@ export function LoginPage() {
           )}
           {mode === "signin" && (
             <>
+              <button className="plain-link" onClick={() => setMode("verify")}>
+                Enter verification code
+              </button>
               <button className="plain-link" onClick={() => setMode("forgot")}>
                 Forgot password?
               </button>
