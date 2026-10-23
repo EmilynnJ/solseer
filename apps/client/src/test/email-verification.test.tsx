@@ -9,14 +9,15 @@ const mocks = vi.hoisted(() => ({
   session: { data: null as null | { user: { id: string; email: string; name: string } }, isPending: false },
   api: vi.fn(),
   signIn: vi.fn(),
-  sendOtp: vi.fn(),
+  sendVerification: vi.fn(),
   verifyEmail: vi.fn(),
 }));
 vi.mock("../lib/auth", () => ({
   authClient: {
     useSession: () => mocks.session,
     signIn: { email: mocks.signIn },
-    emailOtp: { sendVerificationOtp: mocks.sendOtp, verifyEmail: mocks.verifyEmail },
+    sendVerificationEmail: mocks.sendVerification,
+    emailOtp: { verifyEmail: mocks.verifyEmail },
   },
   getAccessToken: vi.fn(),
 }));
@@ -36,16 +37,16 @@ function open(path = "/login") {
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.session.data = null;
-  mocks.sendOtp.mockResolvedValue({ error: null });
+  mocks.sendVerification.mockResolvedValue({ error: null });
 });
 afterEach(() => { cleanup(); sessionStorage.clear(); localStorage.clear(); vi.restoreAllMocks(); });
 
 it("lets a reader enter an existing code without browser storage or another email", () => {
   open();
-  fireEvent.click(screen.getByRole("button", { name: "Enter verification code" }));
+  fireEvent.click(screen.getByRole("button", { name: "Verify email / enter code" }));
   expect(screen.getByLabelText("Email address")).toBeInTheDocument();
   expect(screen.getByLabelText("Verification code")).toBeInTheDocument();
-  expect(mocks.sendOtp).not.toHaveBeenCalled();
+  expect(mocks.sendVerification).not.toHaveBeenCalled();
 });
 
 it("opens the verification URL in a new tab without stored state", () => {
@@ -73,11 +74,53 @@ it("keeps code entry available when sending an email fails and storage is blocke
   vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("Storage blocked"); });
   vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("Storage blocked"); });
   mocks.signIn.mockResolvedValue({ data: { user: { emailVerified: false } } });
-  mocks.sendOtp.mockResolvedValue({ error: { message: "Please wait before requesting another code." } });
+  mocks.sendVerification.mockResolvedValue({ error: { message: "Please wait before requesting another code." } });
   open();
   fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "reader@example.com" } });
   fireEvent.change(screen.getByLabelText("Password"), { target: { value: "test-password" } });
   fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
   expect(await screen.findByLabelText("Verification code")).toBeInTheDocument();
   await waitFor(() => expect(screen.getByText("Please wait before requesting another code.")).toBeInTheDocument());
+});
+
+it("requests the configured verification email when Neon rejects an unverified sign-in", async () => {
+  mocks.signIn.mockResolvedValue({ error: { code: "EMAIL_NOT_VERIFIED", message: "Email not verified" } });
+  open("/login?reset=success");
+  fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "reader@example.com" } });
+  fireEvent.change(screen.getByLabelText("Password"), { target: { value: "test-password" } });
+  fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+  expect(await screen.findByRole("button", { name: "Send verification email" })).toBeInTheDocument();
+  await waitFor(() => expect(mocks.sendVerification).toHaveBeenCalledTimes(1));
+  expect(mocks.sendVerification.mock.calls[0]![0].email).toBe("reader@example.com");
+  const callback = new URL(mocks.sendVerification.mock.calls[0]![0].callbackURL);
+  expect(callback.pathname).toBe("/login");
+  expect(callback.searchParams.get("emailVerified")).toBe("1");
+  expect(callback.searchParams.get("returnTo")).toBe("/dashboard");
+});
+
+it("resends a link without signing in and preserves the reader invitation in its callback", async () => {
+  open("/login?verify=1&readerInvite=reader-invite");
+  fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "reader@example.com" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send verification email" }));
+  await waitFor(() => expect(mocks.sendVerification).toHaveBeenCalledTimes(1));
+  const callback = new URL(mocks.sendVerification.mock.calls[0]![0].callbackURL);
+  expect(callback.searchParams.get("readerInvite")).toBe("reader-invite");
+  expect(mocks.signIn).not.toHaveBeenCalled();
+});
+
+it("leaves verification mode after returning from the email link", async () => {
+  sessionStorage.setItem("soulseer.pendingVerificationEmail", "reader@example.com");
+  open("/login?emailVerified=1");
+  expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+  await waitFor(() => expect(sessionStorage.getItem("soulseer.pendingVerificationEmail")).toBeNull());
+});
+
+it("does not send verification email for an incorrect password", async () => {
+  mocks.signIn.mockResolvedValue({ error: { code: "INVALID_EMAIL_OR_PASSWORD", message: "Invalid email or password" } });
+  open();
+  fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "reader@example.com" } });
+  fireEvent.change(screen.getByLabelText("Password"), { target: { value: "wrong-password" } });
+  fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+  expect(await screen.findByText("Invalid email or password")).toBeInTheDocument();
+  expect(mocks.sendVerification).not.toHaveBeenCalled();
 });

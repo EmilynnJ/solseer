@@ -55,7 +55,9 @@ export function LoginPage() {
   const [mode, setMode] = useState<
     "signin" | "signup" | "verify" | "forgot" | "profile"
   >(
-    pendingVerificationEmail || params.get("verify") === "1" || auth.needsVerification
+    params.get("emailVerified") === "1"
+      ? "signin"
+      : pendingVerificationEmail || params.get("verify") === "1" || auth.needsVerification
       ? "verify"
       : linkInvite
         ? "signup"
@@ -77,7 +79,11 @@ export function LoginPage() {
     tone: "error" | "success";
     text: string;
   } | null>(
-    params.get("reset") === "success"
+    params.get("error") && params.get("emailVerified") === "1"
+      ? { tone: "error", text: "That verification link could not be used. Request a new verification email." }
+      : params.get("emailVerified") === "1"
+      ? { tone: "success", text: "Email verification completed. Sign in to open your account." }
+      : params.get("reset") === "success"
       ? { tone: "success", text: "Password updated. Sign in with your new password." }
       : null,
   );
@@ -85,6 +91,9 @@ export function LoginPage() {
   useEffect(() => {
     if (linkInvite) storeReaderInvite(linkInvite);
   }, [linkInvite]);
+  useEffect(() => {
+    if (params.get("emailVerified") === "1") storeVerificationEmail(null);
+  }, [params]);
   useEffect(() => {
     if (!auth.needsVerification) return;
     setMode("verify");
@@ -103,6 +112,26 @@ export function LoginPage() {
   }, [auth.needsProfile, auth.sessionUser?.name, mode]);
   if (auth.me && mode !== "verify")
     return <Navigate to={returnTo} replace />;
+  async function requestVerification() {
+    if (!form.email.trim()) throw new Error("Enter your email address first.");
+    storeVerificationEmail(form.email.trim());
+    setMode("verify");
+    // Neon sends the configured method (link or code). Requesting an OTP
+    // directly ignores that setting and cannot recover a required-verification login.
+    const result = await authClient.sendVerificationEmail({
+      email: form.email.trim(),
+      callbackURL: `${window.location.origin}/login?${new URLSearchParams({
+        emailVerified: "1",
+        returnTo,
+        ...(readerInvite ? { readerInvite } : {}),
+      }).toString()}`,
+    });
+    if (result.error) throw new Error(result.error.message);
+    setMessage({
+      tone: "success",
+      text: "Verification email requested. Follow its link, or enter its code below. If it doesn’t arrive, check spam or request another email.",
+    });
+  }
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -114,20 +143,13 @@ export function LoginPage() {
           password: form.password,
           callbackURL: returnTo,
         });
+        if (result.error?.code === "EMAIL_NOT_VERIFIED") {
+          await requestVerification();
+          return;
+        }
         if (result.error) throw new Error(result.error.message);
         if (!result.data.user.emailVerified) {
-          storeVerificationEmail(form.email);
-          setMode("verify");
-          const verification = await authClient.emailOtp.sendVerificationOtp({
-            email: form.email,
-            type: "email-verification",
-          });
-          if (verification.error)
-            throw new Error(verification.error.message);
-          setMessage({
-            tone: "success",
-            text: "Verify your email with the code we just sent.",
-          });
+          await requestVerification();
           return;
         }
         await auth.refresh();
@@ -144,18 +166,7 @@ export function LoginPage() {
         });
         if (result.error) throw new Error(result.error.message);
         if (!result.data.user.emailVerified) {
-          storeVerificationEmail(form.email);
-          setMode("verify");
-          const verification = await authClient.emailOtp.sendVerificationOtp({
-            email: form.email,
-            type: "email-verification",
-          });
-          if (verification.error)
-            throw new Error(verification.error.message);
-          setMessage({
-            tone: "success",
-            text: "We sent a verification code to your email.",
-          });
+          await requestVerification();
         } else {
           setMode("profile");
         }
@@ -169,10 +180,10 @@ export function LoginPage() {
           throw new Error("Email verification did not complete.");
         storeVerificationEmail(null);
         await auth.refresh();
-        setMode("profile");
+        setMode("signin");
         setMessage({
           tone: "success",
-          text: "Email verified. Choose your community username.",
+          text: "Email verified. Sign in to open your account.",
         });
       } else if (mode === "forgot") {
         const result = await authClient.requestPasswordReset({
@@ -229,22 +240,14 @@ export function LoginPage() {
     setBusy(true);
     setMessage(null);
     try {
-      const result = await authClient.emailOtp.sendVerificationOtp({
-        email: form.email,
-        type: "email-verification",
-      });
-      if (result.error) throw new Error(result.error.message);
-      setMessage({
-        tone: "success",
-        text: "A new verification code is on its way.",
-      });
+      await requestVerification();
     } catch (cause) {
       setMessage({
         tone: "error",
         text:
           cause instanceof Error
             ? cause.message
-            : "We couldn’t resend the verification code.",
+            : "We couldn’t request the verification email. Please try again.",
       });
     } finally {
       setBusy(false);
@@ -285,7 +288,7 @@ export function LoginPage() {
           </h2>
           <p className="muted">
             {mode === "verify"
-              ? "Enter your email address and the verification code from your email."
+              ? "Request a verification email below. Follow the link in the email, or enter the code here if your email contains one."
               : mode === "profile"
                 ? "Choose how you’ll appear in the SoulSeer community."
                 : form.invite
@@ -420,13 +423,13 @@ export function LoginPage() {
                 void resendVerification();
               }}
             >
-              Resend verification code
+              Send verification email
             </button>
           )}
           {mode === "signin" && (
             <>
               <button className="plain-link" onClick={() => setMode("verify")}>
-                Enter verification code
+                Verify email / enter code
               </button>
               <button className="plain-link" onClick={() => setMode("forgot")}>
                 Forgot password?
