@@ -83,6 +83,45 @@ readingRoutes.post(
 );
 
 readingRoutes.post(
+  "/:id/cancel",
+  requireUser,
+  validateUuidParams("id"),
+  async (context) => {
+    const user = context.get("user");
+    const { db } = createDatabase(context.env.DATABASE_URL);
+    // A pending request has no room or billing to reconcile. A conditional
+    // update avoids cancelling it after another request accepts it.
+    const [cancelled] = await db
+      .update(readingSessions)
+      .set({
+        status: "cancelled",
+        failureReason: "cancelled_by_participant",
+        completedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(readingSessions.id, context.req.param("id")),
+          eq(readingSessions.status, "pending"),
+          or(
+            eq(readingSessions.clientId, user.id),
+            eq(readingSessions.readerId, user.id),
+          ),
+        ),
+      )
+      .returning({ id: readingSessions.id });
+    if (!cancelled) {
+      throw new AppError(
+        409,
+        "READING_NOT_PENDING",
+        "This request is no longer pending or is not yours.",
+      );
+    }
+    return context.json({ reading: { id: cancelled.id, status: "cancelled" } });
+  },
+);
+
+readingRoutes.post(
   "/:id/accept",
   requireUser,
   requireRole("reader"),
