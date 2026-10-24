@@ -160,7 +160,7 @@ adminRoutes.post("/readers/provision", async (context) => {
           'reader.provision',
           'user',
           id::text,
-          jsonb_build_object('email', ${input.email.toLowerCase()}, 'username', ${username})
+          jsonb_build_object('email', ${input.email.toLowerCase()}::text, 'username', ${username}::text)
         FROM new_user
         RETURNING id
       )
