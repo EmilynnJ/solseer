@@ -503,12 +503,25 @@ function ReaderDashboard() {
     }
   }
   async function accept(id: string) {
+    setMessage(null);
     try {
       await api(`/readings/${id}/accept`, { method: "POST" });
       window.location.assign(`/reading/${id}`);
     } catch (cause) {
       setMessage(
-        cause instanceof Error ? cause.message : "Unable to accept reading.",
+        `Unable to accept reading: ${cause instanceof Error ? cause.message : "Please try again."}`,
+      );
+    }
+  }
+  async function decline(id: string) {
+    setMessage(null);
+    try {
+      await api(`/readings/${id}/cancel`, { method: "POST" });
+      await history.refresh();
+      setMessage("Reading request declined.");
+    } catch (cause) {
+      setMessage(
+        `Unable to decline request: ${cause instanceof Error ? cause.message : "Please try again."}`,
       );
     }
   }
@@ -587,9 +600,14 @@ function ReaderDashboard() {
                     {dateTime(r.startedAt)}
                   </small>
                 </div>
-                <Button onClick={() => void accept(r.id)}>
-                  Accept & enter
-                </Button>
+                <div className="request-actions">
+                  <Button onClick={() => void accept(r.id)}>
+                    Accept & enter
+                  </Button>
+                  <Button className="secondary" onClick={() => void decline(r.id)}>
+                    Decline
+                  </Button>
+                </div>
               </article>
             ))}
           </div>
