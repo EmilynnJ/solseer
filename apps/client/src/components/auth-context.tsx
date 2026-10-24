@@ -11,6 +11,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import type { MeResponse } from "../types";
 import { ApiError, api, isProfileRequiredError } from "../lib/api";
 import { authClient } from "../lib/auth";
+import { verificationLinkError } from "../lib/verification";
 import { posthog } from "../lib/posthog";
 import { Loading } from "./ui";
 
@@ -127,6 +128,12 @@ export function Protected({
 }: PropsWithChildren<{ roles?: string[] }>) {
   const auth = useSoulAuth();
   const location = useLocation();
+  const linkError = new URLSearchParams(location.search).get("error");
+  // Older verification emails return here. Keep Neon's failure reason when
+  // redirecting a signed-out reader, instead of silently sending them to login.
+  if (verificationLinkError(linkError)) {
+    return <Navigate to={`/login?${new URLSearchParams({ verify: "1", error: linkError!, returnTo: location.pathname })}`} replace />;
+  }
   if (auth.loading)
     return (
       <main className="page-shell">

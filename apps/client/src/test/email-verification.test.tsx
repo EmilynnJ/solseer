@@ -124,3 +124,26 @@ it("does not send verification email for an incorrect password", async () => {
   expect(await screen.findByText("Invalid email or password")).toBeInTheDocument();
   expect(mocks.sendVerification).not.toHaveBeenCalled();
 });
+
+it.each(["TOKEN_EXPIRED", "INVALID_TOKEN"])("preserves %s from an older dashboard callback and lets the reader resend without login", async (error) => {
+  open(`/dashboard?error=${error}`);
+  expect(await screen.findByRole("heading", { name: "Verify your email" })).toBeInTheDocument();
+  expect(screen.getByRole("alert")).toHaveTextContent(error === "TOKEN_EXPIRED" ? "has expired" : "is invalid");
+  fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "reader@example.com" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send verification email" }));
+  await waitFor(() => expect(mocks.sendVerification).toHaveBeenCalledTimes(1));
+  const callback = new URL(mocks.sendVerification.mock.calls[0]![0].callbackURL);
+  expect(callback.searchParams.get("returnTo")).toBe("/dashboard");
+  expect(callback.searchParams.has("error")).toBe(false);
+  expect(mocks.signIn).not.toHaveBeenCalled();
+});
+
+it("shows expiry on the new login callback without losing the email or claiming success", () => {
+  sessionStorage.setItem("soulseer.pendingVerificationEmail", "reader@example.com");
+  open("/login?emailVerified=1&error=TOKEN_EXPIRED");
+  expect(screen.getByRole("alert")).toHaveTextContent("has expired");
+  expect(screen.getByLabelText("Email address")).toHaveValue("reader@example.com");
+  expect(screen.getByRole("button", { name: "Send verification email" })).toBeInTheDocument();
+  expect(sessionStorage.getItem("soulseer.pendingVerificationEmail")).toBe("reader@example.com");
+  expect(screen.queryByText(/Email verification completed/)).not.toBeInTheDocument();
+});

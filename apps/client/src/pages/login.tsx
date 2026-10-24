@@ -3,6 +3,7 @@ import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import { authClient } from "../lib/auth";
 import { ApiError, api } from "../lib/api";
+import { verificationLinkError } from "../lib/verification";
 import { useSoulAuth } from "../components/auth-context";
 import { Button, Notice } from "../components/ui";
 
@@ -52,10 +53,13 @@ export function LoginPage() {
   const auth = useSoulAuth();
   const navigate = useNavigate();
   const pendingVerificationEmail = storedVerificationEmail();
+  const linkError = verificationLinkError(params.get("error"));
   const [mode, setMode] = useState<
     "signin" | "signup" | "verify" | "forgot" | "profile"
   >(
-    params.get("emailVerified") === "1"
+    linkError
+      ? "verify"
+      : params.get("emailVerified") === "1"
       ? "signin"
       : pendingVerificationEmail || params.get("verify") === "1" || auth.needsVerification
       ? "verify"
@@ -79,7 +83,9 @@ export function LoginPage() {
     tone: "error" | "success";
     text: string;
   } | null>(
-    params.get("error") && params.get("emailVerified") === "1"
+    linkError
+      ? { tone: "error", text: linkError }
+      : params.get("error") && params.get("emailVerified") === "1"
       ? { tone: "error", text: "That verification link could not be used. Request a new verification email." }
       : params.get("emailVerified") === "1"
       ? { tone: "success", text: "Email verification completed. Sign in to open your account." }
@@ -92,7 +98,7 @@ export function LoginPage() {
     if (linkInvite) storeReaderInvite(linkInvite);
   }, [linkInvite]);
   useEffect(() => {
-    if (params.get("emailVerified") === "1") storeVerificationEmail(null);
+    if (params.get("emailVerified") === "1" && !params.has("error")) storeVerificationEmail(null);
   }, [params]);
   useEffect(() => {
     if (!auth.needsVerification) return;
@@ -129,7 +135,7 @@ export function LoginPage() {
     if (result.error) throw new Error(result.error.message);
     setMessage({
       tone: "success",
-      text: "Verification email requested. Follow its link, or enter its code below. If it doesn’t arrive, check spam or request another email.",
+      text: "Verification email requested. Open the newest email promptly and follow its link, or enter its code below. If it doesn’t arrive, check spam or request another email.",
     });
   }
   async function submit(event: FormEvent) {
