@@ -27,8 +27,8 @@ jobs:
         run: npm run build -w @soulseer/shared
       - name: Build frontend and prerender public pages
         run: npm run build -w @soulseer/client
-      - name: Check screenshot discovery in raw HTML
-        run: node --test apps/client/scripts/check-marketing-images.mjs
+      - name: Verify real public content without JavaScript
+        run: node apps/client/scripts/check-public-content.mjs
       - name: Check public metadata without API or database access
         run: |
           node --input-type=module <<'NODE'

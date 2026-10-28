@@ -6,10 +6,11 @@ import { useApiData } from "../hooks/use-api";
 import { ReaderCard } from "../components/reader-card";
 import { Empty, Loading, Notice, PageIntro } from "../components/ui";
 
-export function ReadersPage() {
+export function ReadersPage({ initialReaders }: { initialReaders?: Reader[] | undefined } = {}) {
   const readers = useApiData(
     () => api<{ readers: Reader[] }>("/readers", {}, false),
     [],
+    initialReaders ? { readers: initialReaders } : null,
   );
   const [online, setOnline] = useState(false);
   const [type, setType] = useState("all");

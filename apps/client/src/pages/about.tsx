@@ -30,7 +30,7 @@ export function AboutPage() {
             of gifted psychics united by our life's calling: to guide, heal, and
             empower those who seek clarity on their journey.
           </p>
-          <Link className="button" to="/readers">
+          <Link className="button" to="/readers/">
             Meet our Readers
           </Link>
         </div>

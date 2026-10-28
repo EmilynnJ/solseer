@@ -1,7 +1,8 @@
-// Build public, route-specific HTML without fetching the API or touching user data.
+// Build public route HTML from shared components. Only fetch the public reader directory.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import createDOMPurify from "dompurify";
 import { JSDOM } from "jsdom";
+import { renderPublicPage } from "../.prerender/entry-public.js";
 
 const dist = new URL("../dist/", import.meta.url);
 const rootPath = new URL("index.html", dist);
@@ -15,6 +16,20 @@ if (!existsSync(new URL("images/soulseer-hero-logo.jpg", dist))) {
 const pages = JSON.parse(readFileSync(
   new URL("../src/content/public-pages.json", import.meta.url), "utf8"
 ));
+
+// Public marketing data only: never fetch authenticated endpoints or session data.
+// A temporary API outage must not prevent the static site from deploying.
+let publicReaders;
+try {
+  const apiOrigin = (process.env.VITE_API_ORIGIN || "https://api.soul-seer.net").replace(/\/$/, "");
+  const response = await fetch(`${apiOrigin}/api/readers`, { signal: AbortSignal.timeout(8000) });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const payload = await response.json();
+  if (!Array.isArray(payload.readers)) throw new Error("Invalid public reader directory");
+  publicReaders = payload.readers;
+} catch (error) {
+  console.warn(`Public reader directory unavailable during build: ${error.message}`);
+}
 
 const escapeHtml = (value) =>
   value.replaceAll("&", "&amp;").replaceAll("<", "&lt;")
@@ -46,7 +61,7 @@ function setMeta(document, attribute, key, value) {
 }
 
 function render(page) {
-  const url = `${origin}/${page.slug}/`;
+  const url = `${origin}/${page.slug ? page.slug + "/" : ""}`;
   let output = html;
   output = replaceOnce(output, /<link\b(?=[^>]*\brel="canonical")[^>]*>/i,
     `<link rel="canonical" href="${url}" />`, "canonical");
@@ -60,7 +75,8 @@ function render(page) {
     `<title>${escapeHtml(page.title)}</title>`, "title");
 
   // React replaces this static content when it mounts; bots without JS can read it.
-  const body = `<div id="root"><main>
+  const sharedMarkup = renderPublicPage(page.slug, publicReaders);
+  const body = sharedMarkup ?? `<main>
     <h1>${escapeHtml(page.heading)}</h1>
     <p>${escapeHtml(page.description)}</p>
     <p>${escapeHtml(page.detail)}</p>
@@ -69,22 +85,27 @@ function render(page) {
       <a href="/readers/">Browse psychic readers</a>
       <a href="/about/">About SoulSeer</a></nav>
     <img src="${image}" width="640" alt="SoulSeer psychic reading platform logo" />
-  </main></div>`;
-  output = replaceOnce(output, /<div id="root">[\s\S]*?<\/div>/i, body, "root");
+  </main>`;
+  const document = new JSDOM(output).window.document;
+  document.getElementById("root").innerHTML = body;
+  // Interactions are activated when React mounts; avoid native GET form submission.
+  for (const control of document.querySelectorAll("form input, form button")) control.disabled = true;
+  output = "<!doctype html>\n" + document.documentElement.outerHTML;
   return output;
 }
 
-for (const page of pages.filter((page) => page.slug)) {
-  const directory = new URL(`${page.slug}/`, dist);
+for (const page of pages) {
+  const directory = new URL(page.slug ? `${page.slug}/` : "./", dist);
   mkdirSync(directory, { recursive: true });
   const rendered = render(page);
-  const canonical = `<link rel="canonical" href="${origin}/${page.slug}/" />`;
-  const social = `<meta property="og:url" content="${origin}/${page.slug}/" />`;
-  const heading = `<h1>${escapeHtml(page.heading)}</h1>`;
+  const canonicalUrl = `${origin}/${page.slug ? page.slug + "/" : ""}`;
+  const document = new JSDOM(rendered).window.document;
   if (policySlugs.has(page.slug) && !rendered.includes('class="policy-document"')) {
     throw new Error(`Full policy content missing for /${page.slug}/`);
   }
-  if (![canonical, social, heading].every((marker) => rendered.includes(marker))) {
+  if (document.querySelector('link[rel="canonical"]')?.href !== canonicalUrl ||
+      document.querySelector('meta[property="og:url"]')?.content !== canonicalUrl ||
+      !document.querySelector("h1")) {
     throw new Error(`Crawler HTML validation failed for /${page.slug}/`);
   }
   writeFileSync(new URL("index.html", directory), rendered);
@@ -95,8 +116,9 @@ for (const page of pages.filter((page) => page.slug)) {
 let fallback = html;
 fallback = fallback.replace(/<link\b(?=[^>]*\brel="canonical")[^>]*>\s*/i, "");
 fallback = fallback.replace(/<meta\b(?=[^>]*\bproperty="og:url")[^>]*>\s*/i, "");
-fallback = replaceOnce(fallback, /<div id="root">[\s\S]*?<\/div>/i,
-  '<div id="root"></div>', "root");
+const fallbackDocument = new JSDOM(fallback).window.document;
+fallbackDocument.getElementById("root").innerHTML = "";
+fallback = "<!doctype html>\n" + fallbackDocument.documentElement.outerHTML;
 if (fallback.includes('rel="canonical"') || fallback.includes('property="og:url"')) {
   throw new Error("Neutral SPA fallback still contains homepage indexing metadata.");
 }
