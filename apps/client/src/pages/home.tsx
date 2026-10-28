@@ -138,6 +138,28 @@ export function HomePage() {
           </a>
         </div>
       </section>
+      <section className="section explore-preview">
+        <div className="section-head">
+          <div>
+            <p className="eyebrow">A look inside</p>
+            <h2>Explore SoulSeer.</h2>
+          </div>
+        </div>
+        <div className="explore-preview-grid">
+          <Link to="/" aria-label="Explore the SoulSeer homepage">
+            <img src="/images/soulseer-home-preview.jpg" alt="SoulSeer homepage: guidance that meets you heart to heart" width="1440" height="800" loading="lazy" />
+            <span>Welcome to SoulSeer</span>
+          </Link>
+          <Link to="/readers">
+            <img src="/images/soulseer-readers-preview.jpg" alt="SoulSeer reader search and reading filters" width="1440" height="760" loading="lazy" />
+            <span>Find your Reader</span>
+          </Link>
+          <Link to="/community">
+            <img src="/images/soulseer-community-preview.jpg" alt="SoulSeer community page and ways to connect" width="1440" height="800" loading="lazy" />
+            <span>Meet the community</span>
+          </Link>
+        </div>
+      </section>
       <section className="newsletter section">
         <div>
           <p className="eyebrow">A little light in your inbox</p>

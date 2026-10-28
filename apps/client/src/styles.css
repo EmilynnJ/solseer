@@ -2549,3 +2549,28 @@ tr.projected td {
   object-fit: cover;
   border: 1px solid var(--line);
 }
+
+.explore-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+.explore-preview-grid a {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1rem;
+  background: var(--void);
+  color: inherit;
+}
+.explore-preview-grid img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1.8;
+  object-fit: cover;
+  object-position: top;
+}
+.explore-preview-grid span { display: block; padding: 1rem; }
+@media (max-width: 700px) {
+  .explore-preview-grid { grid-template-columns: 1fr; }
+}
