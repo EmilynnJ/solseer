@@ -14,11 +14,10 @@ import { useApiData } from "../hooks/use-api";
 import { ReaderCard } from "../components/reader-card";
 import { Button, Empty, Loading } from "../components/ui";
 
-export function HomePage({ initialReaders }: { initialReaders?: Reader[] | undefined } = {}) {
+export function HomePage() {
   const readers = useApiData(
     () => api<{ readers: Reader[] }>("/readers/online", {}, false),
     [],
-    initialReaders ? { readers: initialReaders } : null,
   );
   const [newsletter, setNewsletter] = useState({
     email: "",

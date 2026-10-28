@@ -10,7 +10,7 @@ import { HelpPage } from "./pages/info";
 import { CommunityIntro } from "./components/community-intro";
 
 export function renderPublicPage(slug: string, readers?: Reader[]) {
-  const content = slug === "" ? <HomePage initialReaders={readers?.filter((reader) => reader.isOnline)} />
+  const content = slug === "" ? <HomePage />
     : slug === "readers" ? <ReadersPage initialReaders={readers} />
     : slug === "about" ? <AboutPage />
     : slug === "help" ? <HelpPage />
@@ -20,7 +20,7 @@ export function renderPublicPage(slug: string, readers?: Reader[]) {
   return renderToStaticMarkup(
     <StaticRouter location={slug ? `/${slug}/` : "/"}>
       <div className="site-frame">
-        <header className="site-header">
+        <header className="site-header public-static-header">
           <nav className="primary-nav" aria-label="Primary">
             <a href="/readers/">Readers</a><a href="/community/">Community</a>
           </nav>
