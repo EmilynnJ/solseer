@@ -20,15 +20,22 @@ const pages = JSON.parse(readFileSync(
 // Public marketing data only: never fetch authenticated endpoints or session data.
 // A temporary API outage must not prevent the static site from deploying.
 let publicReaders;
-try {
-  const apiOrigin = (process.env.VITE_API_ORIGIN || "https://api.soul-seer.net").replace(/\/$/, "");
-  const response = await fetch(`${apiOrigin}/api/readers`, { signal: AbortSignal.timeout(8000) });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const payload = await response.json();
-  if (!Array.isArray(payload.readers)) throw new Error("Invalid public reader directory");
-  publicReaders = payload.readers;
-} catch (error) {
-  console.warn(`Public reader directory unavailable during build: ${error.message}`);
+const apiOrigin = (process.env.VITE_API_ORIGIN || "https://api.soul-seer.net").replace(/\/$/, "");
+// The same deployed Worker has an enabled workers.dev URL (verified in Cloudflare).
+// Use it for this public GET if zone bot protection rejects the build server.
+// Browser API calls and image URLs continue to use the configured custom domain.
+for (const directoryOrigin of new Set([apiOrigin, "https://soulseer-api.emilynn.workers.dev"])) {
+  try {
+    const response = await fetch(`${directoryOrigin}/api/readers`, { signal: AbortSignal.timeout(8000) });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    if (!Array.isArray(payload.readers)) throw new Error("Invalid public reader directory");
+    publicReaders = payload.readers;
+    console.log(`Rendered public directory data: ${publicReaders.length} readers`);
+    break;
+  } catch (error) {
+    console.warn(`Public reader directory unavailable at ${directoryOrigin}: ${error.message}`);
+  }
 }
 
 const escapeHtml = (value) =>
