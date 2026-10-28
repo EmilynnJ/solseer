@@ -2552,3 +2552,25 @@ tr.projected td {
   object-fit: cover;
   border: 1px solid var(--line);
 }
+
+/* The build-rendered header has usable links before JavaScript mounts. */
+@media (max-width: 768px) {
+  .public-static-header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.75rem;
+    height: auto;
+    padding: 1rem;
+  }
+  .public-static-header .wordmark { order: -1; width: 100%; text-align: center; }
+  .public-static-header .primary-nav {
+    display: flex;
+    position: static;
+    flex-wrap: wrap;
+    width: auto;
+    padding: 0;
+    border: 0;
+    background: none;
+  }
+}
