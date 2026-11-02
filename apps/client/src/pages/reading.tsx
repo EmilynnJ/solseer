@@ -121,15 +121,19 @@ function WaitingRoom({
   onRetry: () => void;
 }) {
   const navigate = useNavigate();
+  const [cancelError, setCancelError] = useState<string | null>(null);
   async function end() {
     if (!confirm("Cancel this reading request?")) return;
+    setCancelError(null);
     try {
-      await api(`/readings/${detail.reading.id}/end`, { method: "POST" });
+      const action = detail.reading.status === "pending" ? "cancel" : "end";
+      await api(`/readings/${detail.reading.id}/${action}`, { method: "POST" });
       posthog.capture("reading_cancelled", {
         reading_type: detail.reading.type,
       });
-    } finally {
       navigate("/dashboard");
+    } catch (cause) {
+      setCancelError(cause instanceof Error ? cause.message : "Unable to cancel the reading.");
     }
   }
   return (
@@ -162,6 +166,7 @@ function WaitingRoom({
         <ShieldCheck /> End-to-end transport security · Server-authoritative
         billing
       </div>
+      {cancelError && <Notice tone="error">{cancelError}</Notice>}
       <Button className="secondary" onClick={() => void end()}>
         Cancel request
       </Button>

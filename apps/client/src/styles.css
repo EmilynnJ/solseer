@@ -1471,6 +1471,12 @@ td small {
 .request-list article > div:first-child {
   display: grid;
 }
+.request-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  justify-content: flex-end;
+}
 .request-list small {
   color: var(--muted);
 }
