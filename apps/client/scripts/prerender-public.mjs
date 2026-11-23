@@ -121,6 +121,10 @@ for (const page of pages) {
 // The catch-all SPA route should use a neutral shell, without claiming the homepage canonical.
 // In Render, change the existing /* rewrite destination to /_app.html *after* deploy.
 let fallback = html;
+// Signed-in pages load this shell: Letter never identifies anyone on them.
+fallback = replaceOnce(fallback, /s\.setAttribute\("data-key","lv_pub_c3477vc9cxnad30cnesguwm0"\);/,
+  's.setAttribute("data-key","lv_pub_c3477vc9cxnad30cnesguwm0");s.setAttribute("data-identification","off");',
+  "Letter tag");
 fallback = fallback.replace(/<link\b(?=[^>]*\brel="canonical")[^>]*>\s*/i, "");
 fallback = fallback.replace(/<meta\b(?=[^>]*\bproperty="og:url")[^>]*>\s*/i, "");
 const fallbackDocument = new JSDOM(fallback).window.document;

@@ -10,6 +10,9 @@ import "./styles.css";
 import "./reading-reentry.css";
 import { App } from "./app";
 import "./lib/posthog";
+import { startLetterConsent } from "./lib/letter";
+
+startLetterConsent();
 
 const root = document.getElementById("root");
 if (!root) throw new Error("The SoulSeer root element is missing.");
