@@ -4,6 +4,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { authClient } from "../lib/auth";
 import { ApiError, api } from "../lib/api";
 import { verificationLinkError } from "../lib/verification";
+import { letter } from "../lib/letter";
 import { useSoulAuth } from "../components/auth-context";
 import { Button, Notice } from "../components/ui";
 
@@ -171,6 +172,7 @@ export function LoginPage() {
           }).toString()}`,
         });
         if (result.error) throw new Error(result.error.message);
+        letter("track", "signup");
         if (!result.data.user.emailVerified) {
           await requestVerification();
         } else {

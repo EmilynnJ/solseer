@@ -38,6 +38,7 @@ import {
 } from "../components/admin-records";
 import { authClient } from "../lib/auth";
 import { posthog } from "../lib/posthog";
+import { letter } from "../lib/letter";
 import {
   Button,
   Empty,
@@ -350,6 +351,7 @@ function PaymentForm({ onComplete }: { onComplete: () => Promise<void> }) {
     }
     await onComplete();
     posthog.capture("balance_top_up_completed");
+    letter("track", "balance_top_up");
   }
   return (
     <form className="stripe-form" onSubmit={pay}>

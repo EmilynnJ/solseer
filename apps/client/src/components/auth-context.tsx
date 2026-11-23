@@ -13,6 +13,7 @@ import { ApiError, api, isProfileRequiredError } from "../lib/api";
 import { authClient } from "../lib/auth";
 import { verificationLinkError } from "../lib/verification";
 import { posthog } from "../lib/posthog";
+import { letter } from "../lib/letter";
 import { Loading } from "./ui";
 
 type AuthState = {
@@ -83,6 +84,7 @@ export function SoulAuthProvider({ children }: PropsWithChildren) {
       email: user.email,
       name: user.name,
     });
+    letter("identify", user.email || user.id);
   }, [session.data?.user, session.isPending]);
 
   const value = useMemo<AuthState>(
