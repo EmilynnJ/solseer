@@ -19,7 +19,7 @@
     "@neondatabase/serverless": "*",
     "@soulseer/shared": "*",
     "drizzle-orm": "*",
-    "hono": "^4.13.13",
+    "hono": "^4.13.16",
     "jose": "*",
     "stripe": "*",
     "zod": "^4.6.7"
