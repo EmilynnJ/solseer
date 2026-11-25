@@ -5,6 +5,7 @@ import { authClient } from "../lib/auth";
 import { ApiError, api } from "../lib/api";
 import { verificationLinkError } from "../lib/verification";
 import { letter } from "../lib/letter";
+import { captureAuthEvent } from "../lib/posthog";
 import { useSoulAuth } from "../components/auth-context";
 import { Button, Notice } from "../components/ui";
 
@@ -134,6 +135,7 @@ export function LoginPage() {
       }).toString()}`,
     });
     if (result.error) throw new Error(result.error.message);
+    captureAuthEvent("auth_verification_requested");
     setMessage({
       tone: "success",
       text: "Verification email requested. Open the newest email promptly and follow its link, or enter its code below. If it doesn’t arrive, check spam or request another email.",
@@ -145,6 +147,7 @@ export function LoginPage() {
     setMessage(null);
     try {
       if (mode === "signin") {
+        captureAuthEvent("auth_signin_attempt");
         const result = await authClient.signIn.email({
           email: form.email,
           password: form.password,
@@ -159,9 +162,11 @@ export function LoginPage() {
           await requestVerification();
           return;
         }
+        captureAuthEvent("auth_signin_success", result.data.user.id);
         await auth.refresh();
         navigate(returnTo);
       } else if (mode === "signup") {
+        captureAuthEvent("auth_signup_attempt");
         const result = await authClient.signUp.email({
           email: form.email,
           password: form.password,
@@ -172,6 +177,7 @@ export function LoginPage() {
           }).toString()}`,
         });
         if (result.error) throw new Error(result.error.message);
+        captureAuthEvent("auth_signup_created", result.data.user.id);
         letter("track", "signup");
         if (!result.data.user.emailVerified) {
           await requestVerification();
@@ -212,11 +218,13 @@ export function LoginPage() {
             ...(form.invite ? { readerInviteToken: form.invite } : {}),
           }),
         });
+        captureAuthEvent("auth_profile_completed", auth.sessionUser?.id);
         storeReaderInvite(null);
         await auth.refresh();
         navigate(returnTo);
       }
     } catch (cause) {
+      captureAuthEvent("auth_flow_failed", undefined, mode);
       // An expired or mismatched invitation can never succeed, so stop
       // sending it; the next submit creates an ordinary client profile.
       const inviteConflict =

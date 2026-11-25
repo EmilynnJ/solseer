@@ -5,6 +5,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  useRef,
   type PropsWithChildren,
 } from "react";
 import { Navigate, useLocation } from "react-router-dom";
@@ -12,7 +13,7 @@ import type { MeResponse } from "../types";
 import { ApiError, api, isProfileRequiredError } from "../lib/api";
 import { authClient } from "../lib/auth";
 import { verificationLinkError } from "../lib/verification";
-import { posthog } from "../lib/posthog";
+import { identifyAnalyticsUser, resetAnalyticsUser } from "../lib/posthog";
 import { letter } from "../lib/letter";
 import { Loading } from "./ui";
 
@@ -30,6 +31,7 @@ const AuthContext = createContext<AuthState | null>(null);
 
 export function SoulAuthProvider({ children }: PropsWithChildren) {
   const session = authClient.useSession();
+  const previousAnalyticsUser = useRef<string | null>(null);
   const [me, setMe] = useState<MeResponse | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [needsProfile, setNeedsProfile] = useState(false);
@@ -76,14 +78,13 @@ export function SoulAuthProvider({ children }: PropsWithChildren) {
 
     const user = session.data?.user;
     if (!user) {
-      posthog.reset();
+      if (previousAnalyticsUser.current) resetAnalyticsUser();
+      previousAnalyticsUser.current = null;
       return;
     }
 
-    posthog.identify(user.id, {
-      email: user.email,
-      name: user.name,
-    });
+    previousAnalyticsUser.current = user.id;
+    identifyAnalyticsUser(user.id);
     letter("identify", user.email || user.id);
   }, [session.data?.user, session.isPending]);
 

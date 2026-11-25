@@ -34,7 +34,11 @@ app.use("*", async (context, next) => {
   context.header("X-Request-Id", requestId);
   logger.info(
     "Request completed",
-    { requestId, route: new URL(context.req.url).pathname },
+    {
+      requestId,
+      route: context.req.routePath,
+      userId: context.get("user")?.id ?? context.get("identity")?.subject,
+    },
     {
       method: context.req.method,
       status: context.res.status,
