@@ -92,3 +92,8 @@ binding = "CLOUDFLARE_REALTIMEKIT_API_TOKEN"
 store_id = "ff0046cedef447d2a6a84d137b2fd0c3"
 secret_name = "CLOUDFLARE_REALTIMEKIT_API_TOKEN"
 
+
+# Enable only after the security_activity migration and permissions are verified.
+# A 15-minute cadence can affect Neon compute usage; review after staging.
+# [env.production.triggers]
+# crons = ["*/15 * * * *"]

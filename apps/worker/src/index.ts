@@ -9,6 +9,7 @@ import {
   securityHeaders,
 } from "./lib/http";
 import { logger } from "./lib/log";
+import { reconcileSecurityActivity } from "./lib/security-activity";
 import { adminRoutes } from "./routes/admin";
 import { adminInsightRoutes } from "./routes/admin-insights";
 import { authRoutes } from "./routes/auth";
@@ -80,6 +81,15 @@ app.notFound((context) =>
 app.onError((error, context) => errorResponse(error, context));
 
 export default {
+  async scheduled(_controller: ScheduledController, env: Env, _executionContext: ExecutionContext) {
+    try {
+      const inserted = await reconcileSecurityActivity(env.DATABASE_URL);
+      logger.info("Security reconciliation completed", { operation: "security.reconcile" }, { inserted });
+    } catch {
+      logger.error("Security reconciliation failed", { operation: "security.reconcile" });
+      throw new Error("Security reconciliation failed");
+    }
+  },
   async fetch(request: Request, env: Env, executionContext: ExecutionContext) {
     return app.fetch(
       request,
