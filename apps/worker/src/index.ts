@@ -38,7 +38,8 @@ app.use("*", async (context, next) => {
     {
       requestId,
       route: context.req.routePath,
-      userId: context.get("user")?.id ?? context.get("identity")?.subject,
+      userId: context.get("user")?.id,
+      authUserId: context.get("identity")?.subject,
     },
     {
       method: context.req.method,

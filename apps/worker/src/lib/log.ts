@@ -1,6 +1,7 @@
 export type LogContext = {
   requestId?: string;
   userId?: string;
+  authUserId?: string;
   readingId?: string;
   providerEventId?: string;
   route?: string;

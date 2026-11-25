@@ -113,6 +113,7 @@ export const requireUser: MiddlewareHandler<AppBindings> = async (
     bearerToken(context.req.header("Authorization")),
     context.env,
   );
+  context.set("identity", identity);
   const { db } = createDatabase(context.env.DATABASE_URL);
   const [profile] = await db
     .select()
@@ -145,7 +146,6 @@ export const requireUser: MiddlewareHandler<AppBindings> = async (
     status: profile.status,
   };
 
-  context.set("identity", identity);
   context.set("user", user);
   await next();
 };

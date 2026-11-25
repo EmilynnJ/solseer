@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import type { AppBindings } from "../types";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { z, ZodError } from "zod";
 import { logger } from "./log";
@@ -15,7 +16,7 @@ export class AppError extends Error {
   }
 }
 
-export function errorResponse(error: unknown, context: Context): Response {
+export function errorResponse(error: unknown, context: Context<AppBindings>): Response {
   const requestId = context.get("requestId") as string;
   const appError =
     error instanceof AppError
@@ -34,12 +35,9 @@ export function errorResponse(error: unknown, context: Context): Response {
           );
 
   logger.error(
-    appError.message,
-    { requestId, route: new URL(context.req.url).pathname },
-    {
-      code: appError.code,
-      error: error instanceof Error ? error.message : String(error),
-    },
+    "Request failed",
+    { requestId, route: context.req.routePath, userId: context.get("user")?.id, authUserId: context.get("identity")?.subject },
+    { code: appError.code, status: appError.status, method: context.req.method },
   );
 
   return context.json(
