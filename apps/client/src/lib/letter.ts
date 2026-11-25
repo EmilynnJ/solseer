@@ -1,3 +1,5 @@
+import { setPostHogConsent } from "./posthog";
+
 // Letter: calls made before the tag in index.html has loaded are queued for it.
 type LetterCall = ((command: string, ...args: unknown[]) => void) & { q?: unknown[] };
 
@@ -29,7 +31,10 @@ type TermlyApi = {
 function syncTermlyConsent(termly: TermlyApi) {
   const apply = () => {
     const state = termly.getConsentState?.();
-    if (state) letter("consent", state.analytics ? "granted" : "denied");
+    if (state) {
+      letter("consent", state.analytics ? "granted" : "denied");
+      setPostHogConsent(state.analytics === true);
+    }
   };
   termly.on?.("initialized", apply);
   termly.on?.("consent", apply);

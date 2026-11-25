@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { NeonAuthUIProvider } from "@neondatabase/neon-js/auth/react/ui";
 import { authClient } from "./lib/auth";
+import { capturePublicPage } from "./lib/posthog";
 import { SoulAuthProvider, Protected } from "./components/auth-context";
 import { Layout } from "./components/layout";
 import { Loading } from "./components/ui";
@@ -56,6 +57,7 @@ const PolicyPage = lazy(() =>
 
 function PublicMetadata() {
   const { pathname } = useLocation();
+  useEffect(() => { capturePublicPage(pathname); }, [pathname]);
   useEffect(() => {
     const path = pathname.replace(/\/+$/, "") || "/";
     const current = publicPages.find(({ slug }) => (slug ? "/" + slug : "/") === path);

@@ -9,6 +9,7 @@ import {
   securityHeaders,
 } from "./lib/http";
 import { logger } from "./lib/log";
+import { reconcileSecurityActivity } from "./lib/security-activity";
 import { adminRoutes } from "./routes/admin";
 import { adminInsightRoutes } from "./routes/admin-insights";
 import { authRoutes } from "./routes/auth";
@@ -34,7 +35,12 @@ app.use("*", async (context, next) => {
   context.header("X-Request-Id", requestId);
   logger.info(
     "Request completed",
-    { requestId, route: new URL(context.req.url).pathname },
+    {
+      requestId,
+      route: context.req.routePath,
+      userId: context.get("user")?.id,
+      authUserId: context.get("identity")?.subject,
+    },
     {
       method: context.req.method,
       status: context.res.status,
@@ -76,6 +82,15 @@ app.notFound((context) =>
 app.onError((error, context) => errorResponse(error, context));
 
 export default {
+  async scheduled(_controller: ScheduledController, env: Env, _executionContext: ExecutionContext) {
+    try {
+      const inserted = await reconcileSecurityActivity(env.DATABASE_URL);
+      logger.info("Security reconciliation completed", { operation: "security.reconcile" }, { inserted });
+    } catch {
+      logger.error("Security reconciliation failed", { operation: "security.reconcile" });
+      throw new Error("Security reconciliation failed");
+    }
+  },
   async fetch(request: Request, env: Env, executionContext: ExecutionContext) {
     return app.fetch(
       request,

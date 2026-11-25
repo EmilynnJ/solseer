@@ -24,6 +24,7 @@ import { ApiError, api, dateTime, duration, money } from "../lib/api";
 import { useApiData } from "../hooks/use-api";
 import { useSoulAuth } from "../components/auth-context";
 import { ReaderImageUpload } from "../components/reader-image-upload";
+import { AdminSecurity } from "../components/admin-security";
 import {
   AdminAnalytics,
   AdminLedger,
@@ -997,6 +998,7 @@ function AdminDashboard() {
           "payouts",
           "moderation",
           "analytics",
+          "security",
         ].map((item) => (
           <button
             className={tab === item ? "active" : ""}
@@ -1007,6 +1009,11 @@ function AdminDashboard() {
           </button>
         ))}
       </nav>
+      {tab === "security" && (
+        <DashboardSection icon={<Shield />} title="Security activity">
+          <AdminSecurity />
+        </DashboardSection>
+      )}
       {tab === "users" && (
         <DashboardSection icon={<Users />} title="Users & balances">
           <AdminUsers

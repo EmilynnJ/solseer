@@ -419,3 +419,33 @@ adminInsightRoutes.get("/analytics", async (context) => {
     usersByRole: rows(totals),
   });
 });
+
+// Independent auth inventory and observed events. The existing middleware
+// requires a verified, active application administrator for every route.
+adminInsightRoutes.get("/security/activity", async (context) => {
+  const { authUserId } = z.object({
+    authUserId: z.string().uuid().optional(),
+  }).parse(context.req.query());
+  const { db } = createDatabase(context.env.DATABASE_URL);
+  const subject = authUserId ? sql`AND a.id::text = ${authUserId}` : sql``;
+  const eventSubject = authUserId ? sql`WHERE auth_user_id = ${authUserId}` : sql``;
+  const [inventory, activity] = await Promise.all([
+    db.execute(sql`
+      SELECT a.id::text AS "authUserId", a.name, a.email,
+        a."createdAt" AS "createdAt", a."emailVerified" AS "emailVerified",
+        a.role AS "authRole", u.id::text AS "profileId", u.role::text AS "profileRole",
+        EXISTS (SELECT 1 FROM neon_auth.session s WHERE s."userId" = a.id AND s."expiresAt" > now()) AS "hasActiveSession"
+      FROM neon_auth."user" a LEFT JOIN public.users u ON u.neon_auth_user_id = a.id::text
+      WHERE true ${subject}
+      ORDER BY a."createdAt" DESC, a.id DESC LIMIT 100
+    `),
+    db.execute(sql`
+      SELECT id::text, auth_user_id AS "authUserId", event_type AS "eventType",
+        occurred_at AS "occurredAt", observed_at AS "observedAt"
+      FROM public.security_activity ${eventSubject}
+      ORDER BY occurred_at DESC, id DESC LIMIT 200
+    `),
+  ]);
+  context.header("Cache-Control", "no-store");
+  return context.json({ accounts: rows(inventory), activity: rows(activity) });
+});
