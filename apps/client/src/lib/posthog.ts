@@ -18,17 +18,36 @@ if (posthogKey && posthogHost) {
     capture_pageleave: false,
     capture_exceptions: false,
     disable_session_recording: true,
+    property_denylist: ["$current_url", "$pathname", "$referrer", "$initial_current_url", "$initial_pathname", "$initial_referrer", "$title"],
   });
 }
 
-let analyticsAllowed = false;
+let analyticsAllowed: boolean | undefined;
+let lastPage: string | undefined;
+
+const publicPages = new Set(["/", "/readers", "/about", "/community", "/help", "/privacy", "/terms", "/acceptable-use", "/accessibility", "/eula", "/disclaimer"]);
+
+export function capturePublicPage(pathname: string) {
+  if (!configured || !analyticsAllowed) return;
+  const path = pathname.replace(/\/+$/, "") || "/";
+  const page = publicPages.has(path) ? path : /^\/readers\/[^/]+$/.test(path) ? "/readers/:id" : undefined;
+  if (!page) { lastPage = undefined; return; }
+  if (lastPage === page) return;
+  lastPage = page;
+  try { posthog.capture("public_page_view", { page }); } catch { /* optional analytics */ }
+}
 
 export function setPostHogConsent(allowed: boolean) {
   if (!configured || analyticsAllowed === allowed) return;
   analyticsAllowed = allowed;
   try {
-    if (allowed) posthog.opt_in_capturing();
-    else posthog.opt_out_capturing();
+    if (allowed) {
+      posthog.opt_in_capturing();
+      capturePublicPage(window.location.pathname);
+    } else {
+      lastPage = undefined;
+      posthog.opt_out_capturing();
+    }
   } catch {
     // Optional analytics must not interrupt essential app functionality.
   }
